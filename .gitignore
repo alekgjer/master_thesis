@@ -1,0 +1,13 @@
+ 
+# Ignore results and plots
+plots/*
+results/*
+
+# Ignore notebook checkpoints
+.ipynb_checkpoints
+
+# Ignore .idea
+.idea/
+
+# Ignore config.py
+config.py
