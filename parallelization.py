@@ -36,8 +36,8 @@ def run_simulation(N, xi, v0, radius, run_number):
 
     energy_matrix[:, 1] = norm(simulation.box_of_particles.velocities, axis=1)
 
-    # np.save(file=os.path.join(results_folder, f'distributionEqParticles_N_{N}_eq_energy_matrix_{run_number}'),
-    #         arr=energy_matrix)
+    np.save(file=os.path.join(results_folder, f'distributionEqParticles_N_{N}_eq_energy_matrix_{run_number}'),
+            arr=energy_matrix)
 
 
 def problem(number_of_cores):
@@ -48,15 +48,16 @@ def problem(number_of_cores):
 
     number_of_runs = 10
 
-    Parallel(n_jobs=number_of_cores)(delayed(run_simulation)(N, xi, v_0, radius, run_number) for run_number in range(number_of_runs))
+    Parallel(n_jobs=number_of_cores)(delayed(run_simulation)(N, xi, v_0, radius, run_number)
+                                     for run_number in range(number_of_runs))
 
 
-data_matrix = np.ones((4, 2))
-for i in range(1, 5):
-    start_time = time.time()
-    problem(number_of_cores=i)
-    data_matrix[i-1, 0] = i
-    data_matrix[i-1, 1] = time.time()-start_time
-print(data_matrix)
+# data_matrix = np.ones((4, 2))
+# for i in range(1, 5):
+#     start_time = time.time()
+#     problem(number_of_cores=i)
+#     data_matrix[i-1, 0] = i
+#     data_matrix[i-1, 1] = time.time()-start_time
+# print(data_matrix)
 
-# problem(number_of_cores=4)
+problem(number_of_cores=4)

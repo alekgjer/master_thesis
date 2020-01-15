@@ -245,7 +245,8 @@ class Simulation:
         print('Simulation done!')
         print('---------------------')
 
-    def simulate_statistics_until_given_time(self, simulation_label, output_timestep=1.0, equal_particles=True):
+    def simulate_statistics_until_given_time(self, simulation_label, output_timestep=1.0, equal_particles=True,
+                                             save_positions=True):
         """
             Implementation of the event driven simulation where the stopping criterion is given as a limit of
             how much one want the simulation time to be. Is useful when looking at a property as a function of time.
@@ -253,13 +254,17 @@ class Simulation:
         :param simulation_label: string containing information about the simulation to identify simulation
         :param output_timestep: parameter used to determine how often do to an output in the simulation
         :param equal_particles: boolean value that indicates if the particles are equal in mass.
+        :param save_positions: boolean variable used to indicate if one want to save positions. Since saving takes some
+        capacity and it is not so interesting when doing multiple runs one have the option to not save positions.
         :return time_array, energy_array_all, energy_array_m0, energy_array_m, mean_speed_array
         """
         print('Simulate until a given simulation time')
         print(f'N: {self.box_of_particles.N} and xi: {self.box_of_particles.restitution_coefficient}..')
         print('---------------------')
         # create folder in order to save particle positions as a png files throughout the simulation
-        simulation_folder = self.create_simulation_folder(simulation_label)
+        simulation_folder = ""
+        if save_positions:
+            simulation_folder = self.create_simulation_folder(simulation_label)
 
         print('Creating initial queue..')
 
@@ -273,7 +278,8 @@ class Simulation:
 
         # give initial output and save particle positions
         self.print_output(self.average_number_of_collisions, avg_energy)
-        self.save_particle_positions(simulation_folder, output_number)
+        if save_positions:
+            self.save_particle_positions(simulation_folder, output_number)
         next_output_time += output_timestep
         output_number += 1
 
@@ -320,7 +326,8 @@ class Simulation:
 
                 # give output and save particle positions
                 self.print_output(self.average_number_of_collisions, avg_energy)
-                self.save_particle_positions(simulation_folder, output_number)
+                if save_positions:
+                    self.save_particle_positions(simulation_folder, output_number)
 
                 next_output_time += output_timestep
                 output_number += 1
