@@ -235,19 +235,12 @@ class ParticleBox:
         self.add_collision_vertical_wall_to_queue(particle_number, simulation_time)
         self.add_collisions_particle_to_queue(particle_number, simulation_time, t_max)
 
-    def compute_energy(self, equal_particles):
+    def compute_energy(self):
         """
             Function to compute the energy in the system of particles. Based on boolean input can compute average
             kinetic energy of all particles or compute average for all, for m0 and for m.
-        :param equal_particles: bool value indicating if there exist similar type of particles. If false: the different
-        halves of particles contain two different particle masses, m0 and m.
-        :return: average energy of all particles or average energy of all particles, m0 particles and m particles
+        :return: average energy of all particles
         """
         energy = 0.5 * self.masses * np.sum(self.velocities * self.velocities, axis=1)
         avg_energy = np.mean(energy)  # average kinetic energy of all particles
-        if equal_particles:
-            return avg_energy
-        else:
-            avg_energy_m0 = np.mean(energy[:int(self.N/2)])  # average kinetic energy of m0 particles
-            avg_energy_m = np.mean(energy[int(self.N/2):])  # average kinetic energy of m(=4m0) particles
-            return avg_energy, avg_energy_m0, avg_energy_m
+        return avg_energy

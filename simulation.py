@@ -56,8 +56,8 @@ class Simulation:
             Function to print desired output from the simulation
         """
         print('--- Output ---')
-        print(f'Simulation time: {self.simulation_time}')
-        print("Priority queue elements: ", len(self.box_of_particles.collision_queue))
+        print(f"Simulation time: {self.simulation_time}")
+        print(f"Priority queue elements: {len(self.box_of_particles.collision_queue)}")
         print(f"Avg energy: {avg_energy}")
         print(f"Average number of collisions: {average_number_of_collisions}")
 
@@ -116,7 +116,7 @@ class Simulation:
         plt.savefig(os.path.join(simulation_folder, f"{picture_number}.png"))
         plt.close()
 
-    def perform_collision(self, time_at_collision, collision_tuple, sticky_particles=False, t_max=None):
+    def perform_collision(self, time_at_collision, collision_tuple, t_max=None):
         """
             FUnction that from a collision tuple, performs the collision. Performing a collision consist of updating
             the velocity of the involved particle(s) and update the parameters like collision count, average number of
@@ -124,7 +124,6 @@ class Simulation:
             for the involved particle(s).
         :param time_at_collision: time indicating the moment when the collision will occur
         :param collision_tuple: tuple with information: (coll_time, coll entities, coll_count_comp_coll)
-        :param sticky_particles: bool value to indicate if one is working with sticky particles
         :param t_max: the stopping criterion of the simulation is given by time. Used to not add collisions occurring
         after the stopping criterion if one have used a stopping criterion based on time.
         """
@@ -165,13 +164,6 @@ class Simulation:
             else:
                 self.box_of_particles.collision_particles(object_one, object_two,
                                                           self.box_of_particles.restitution_coefficient)
-            # if sticky_particles the particle get stuck if it hits the particles at rest
-            if sticky_particles:
-                if self.box_of_particles.masses[object_one] + self.box_of_particles.masses[object_two] > 1e+5:
-                    self.box_of_particles.masses[object_one] = 10 ** 10
-                    self.box_of_particles.masses[object_two] = 10 ** 10
-                    self.box_of_particles.velocities[object_one, :] = [0, 0]
-                    self.box_of_particles.velocities[object_two, :] = [0, 0]
 
         self.box_of_particles.collision_count_particles[object_one] += 1  # update collision count
         if object_two not in ['hw', 'vw']:  # if there is a second particle involved
@@ -208,7 +200,7 @@ class Simulation:
         output_number = 0  # value to keep the order of pictures saved at each output
         self.box_of_particles.create_initial_priority_queue()  # Initialize the queue with all starting collisions
 
-        avg_energy = self.box_of_particles.compute_energy(equal_particles=True)  # initial energy for all particles
+        avg_energy = self.box_of_particles.compute_energy()  # initial energy for all particles
 
         # give initial output and save particle positions
         self.print_output(0, avg_energy)
@@ -229,7 +221,7 @@ class Simulation:
                 self.box_of_particles.positions += self.box_of_particles.velocities * dt
                 self.simulation_time += dt
 
-                avg_energy = self.box_of_particles.compute_energy(equal_particles=True)  # compute average energy
+                avg_energy = self.box_of_particles.compute_energy()  # compute average energy
 
                 # give output and save particle positions
                 self.print_output(self.average_number_of_collisions, avg_energy)
@@ -245,18 +237,16 @@ class Simulation:
         print('Simulation done!')
         print('---------------------')
 
-    def simulate_statistics_until_given_time(self, simulation_label, output_timestep=1.0, equal_particles=True,
-                                             save_positions=True):
+    def simulate_statistics_until_given_time(self, simulation_label, output_timestep=1.0, save_positions=True):
         """
             Implementation of the event driven simulation where the stopping criterion is given as a limit of
             how much one want the simulation time to be. Is useful when looking at a property as a function of time.
             Atm computes mean energy and speed of all particles at all output times. Essentially gives statistics
         :param simulation_label: string containing information about the simulation to identify simulation
         :param output_timestep: parameter used to determine how often do to an output in the simulation
-        :param equal_particles: boolean value that indicates if the particles are equal in mass.
         :param save_positions: boolean variable used to indicate if one want to save positions. Since saving takes some
         capacity and it is not so interesting when doing multiple runs one have the option to not save positions.
-        :return time_array, energy_array_all, energy_array_m0, energy_array_m, mean_speed_array
+        :return time_array, energy_array, mean_speed_array
         """
         print('Simulate until a given simulation time')
         print(f'N: {self.box_of_particles.N} and xi: {self.box_of_particles.restitution_coefficient}..')
@@ -271,10 +261,10 @@ class Simulation:
         next_output_time = 0  # value that keeps track of when the next output will occur
         output_number = 0  # value to keep the order of pictures saved at each output
         # Initialize the queue with all starting collisions
-        self.box_of_particles.create_initial_priority_queue(self.stopping_criterion)
+        self.box_of_particles.create_initial_priority_queue(t_max=self.stopping_criterion)
 
-        # initial energy for all particles, m0 particles and m particles
-        avg_energy, avg_energy_m0, avg_energy_m = self.box_of_particles.compute_energy(equal_particles=False)
+        # initial energy for all particles
+        avg_energy = self.box_of_particles.compute_energy()
 
         # give initial output and save particle positions
         self.print_output(self.average_number_of_collisions, avg_energy)
@@ -284,18 +274,10 @@ class Simulation:
         output_number += 1
 
         time_array = np.zeros(int(self.stopping_criterion/output_timestep)+1)  # array for time at all output times
-        energy_array_all = np.zeros_like(time_array)  # array for average energy of at particles at all output times
-        energy_array_m0 = np.zeros_like(time_array)  # array for average energy of m0 particles
-        energy_array_m = np.zeros_like(time_array)  # array for average energy of m particles at all output times
+        energy_array = np.zeros_like(time_array)  # array for average energy of at particles at all output times
         mean_speed_array = np.zeros_like(time_array)  # array for average speed at all output times
 
-        if equal_particles:
-            energy_array_all[0] = avg_energy
-        else:
-            energy_array_all[0] = avg_energy
-            energy_array_m0[0] = avg_energy_m0
-            energy_array_m[0] = avg_energy_m
-
+        energy_array[0] = avg_energy
         mean_speed_array[0] = np.mean(norm(self.box_of_particles.velocities, axis=1))
 
         print('Event driven simulation in progress..')
@@ -313,15 +295,9 @@ class Simulation:
                 time_array[output_number] = self.simulation_time
 
                 # average energy for all particles, m0 particles and m particles
-                avg_energy, avg_energy_m0, avg_energy_m = self.box_of_particles.compute_energy(equal_particles=False)
+                avg_energy = self.box_of_particles.compute_energy()
 
-                if equal_particles:
-                    energy_array_all[output_number] = avg_energy
-                else:
-                    energy_array_all[output_number] = avg_energy
-                    energy_array_m0[output_number] = avg_energy_m0
-                    energy_array_m[output_number] = avg_energy_m
-
+                energy_array[output_number] = avg_energy
                 mean_speed_array[output_number] = np.mean(norm(self.box_of_particles.velocities, axis=1))
 
                 # give output and save particle positions
@@ -333,14 +309,13 @@ class Simulation:
                 output_number += 1
 
             if self.box_of_particles.valid_collision(collision_tuple):
-                self.perform_collision(time_at_collision, collision_tuple, self.stopping_criterion)
+                self.perform_collision(time_at_collision, collision_tuple, t_max=self.stopping_criterion)
 
         print('Simulation done!')
         print('---------------------')
-        return time_array, energy_array_all, energy_array_m0, energy_array_m, mean_speed_array
+        return time_array, energy_array, mean_speed_array
 
-    def simulate_until_given_energy(self, simulation_label, output_timestep=1.0, sticky_particles=False,
-                                    save_positions=True):
+    def simulate_until_given_energy(self, simulation_label, output_timestep=1.0, save_positions=True):
         """
             Implementation of the event driven simulation where the stopping criterion is given as a limit of
             how much one want the average energy time to be. Is useful when looking at the end result of a system where
@@ -349,8 +324,6 @@ class Simulation:
             Atm computes mean energy and speed of all particles at all output times.
         :param simulation_label: string containing information about the simulation to identify simulation
         :param output_timestep: parameter used to determine how often do to an output in the simulation
-        :param sticky_particles: boolean value that indicates if the particles are sticky. If a particle colliding with
-        a particle it rest, is will get stuck. The end result will resemble a fractal.
         :param save_positions: boolean variable used to indicate if one want to save positions. Since saving takes some
         capacity and it is not so interesting when doing multiple runs one have the option to not save positions.
         """
@@ -369,7 +342,7 @@ class Simulation:
         self.box_of_particles.create_initial_priority_queue()  # Initialize the queue with all starting collisions
 
         # initial average energy for all particles
-        avg_energy = self.box_of_particles.compute_energy(equal_particles=True)
+        avg_energy = self.box_of_particles.compute_energy()
 
         # give initial output and save particle positions
         self.print_output(self.average_number_of_collisions, avg_energy)
@@ -391,7 +364,7 @@ class Simulation:
                 self.simulation_time += dt
 
                 # average energy for all particles
-                avg_energy = self.box_of_particles.compute_energy(equal_particles=True)
+                avg_energy = self.box_of_particles.compute_energy()
 
                 # give output and save particle positions
                 self.print_output(self.average_number_of_collisions, avg_energy)
@@ -401,9 +374,9 @@ class Simulation:
                 next_output_time += output_timestep
                 output_number += 1
             if self.box_of_particles.valid_collision(collision_tuple):
-                self.perform_collision(time_at_collision, collision_tuple, sticky_particles)
+                self.perform_collision(time_at_collision, collision_tuple)
                 # recompute the avg_energy for the stopping criterion
-                avg_energy = self.box_of_particles.compute_energy(equal_particles=True)
+                avg_energy = self.box_of_particles.compute_energy()
 
         print('Simulation done!')
         print('---------------------')
@@ -438,7 +411,7 @@ class Simulation:
         self.box_of_particles.create_initial_priority_queue(t_max=self.stopping_criterion)
 
         # initial energy for all particles, m0 particles and m particles
-        avg_energy = self.box_of_particles.compute_energy(equal_particles=True)
+        avg_energy = self.box_of_particles.compute_energy()
 
         if self.mask is None:
             # pick all particles inside a circle from center with radius 0.1 by turning mask into boolean array
@@ -483,7 +456,7 @@ class Simulation:
                     np.mean(norm(self.box_of_particles.velocities[self.mask], axis=1)**2)
 
                 # average energy for all particles, m0 particles and m particles
-                avg_energy = self.box_of_particles.compute_energy(equal_particles=True)
+                avg_energy = self.box_of_particles.compute_energy()
 
                 # give output and save particle positions
                 self.print_output(self.average_number_of_collisions, avg_energy)
@@ -545,7 +518,7 @@ class Simulation:
         self.box_of_particles.create_initial_priority_queue(t_max=self.stopping_criterion)
 
         # initial energy for all particles, m0 particles and m particles
-        avg_energy = self.box_of_particles.compute_energy(equal_particles=True)
+        avg_energy = self.box_of_particles.compute_energy()
 
         # give initial output and save particle positions
         self.print_output(self.average_number_of_collisions, avg_energy)
@@ -578,7 +551,7 @@ class Simulation:
                 bp_velocity_array[output_number, :] = self.box_of_particles.velocities[self.mask]
 
                 # average energy for all particles, m0 particles and m particles
-                avg_energy = self.box_of_particles.compute_energy(equal_particles=True)
+                avg_energy = self.box_of_particles.compute_energy()
 
                 # give output and save particle positions
                 self.print_output(self.average_number_of_collisions, avg_energy)

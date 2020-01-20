@@ -46,7 +46,7 @@ def problem(number_of_cores):
     v_0 = 0.2  # initial speed
     radius = 0.007  # radius of all particles
 
-    number_of_runs = 10
+    number_of_runs = 30
 
     Parallel(n_jobs=number_of_cores)(delayed(run_simulation)(N, xi, v_0, radius, run_number)
                                      for run_number in range(number_of_runs))
