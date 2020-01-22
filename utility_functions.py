@@ -2,53 +2,13 @@ import numpy as np
 import os
 
 from scipy.linalg import norm
+from joblib import Parallel, delayed
 
 from particle_box import ParticleBox
 from simulation import Simulation
 from config import results_folder, init_folder
 
 # Various utility functions
-
-
-def random_positions_and_radius(number_particles, min_value=1e-04, y_max=1):
-    """
-        Function to create random positions in a desired area of a square box with lines at x = 0, x=1, y=0, y=1
-    :param number_particles: number of particles in the box
-    :param min_value: minimum position away from an axis
-    :param y_max: max position away from y-axis
-    :return: random positions decided by input parameters and min possible radius for the particles to not overlap each
-    other or a wall
-    """
-    # random positions making sure that the positions do not get closer than min_value to the walls
-    x_pos = np.random.uniform(low=min_value, high=(1-min_value), size=number_particles)
-    y_pos = np.random.uniform(low=min_value, high=(y_max-min_value), size=number_particles)
-    positions = np.zeros((number_particles, 2))  # save positions as a (N, 2) array.
-    positions[:, 0] = x_pos
-    positions[:, 1] = y_pos
-
-    min_distance_from_zero_x = np.min(positions[:, 0])  # closest particle distance to y_axis
-    min_distance_from_zero_y = np.min(positions[:, 1])  # closest particle distance to x_axis
-    min_distance_from_x_max = np.min(1 - positions[:, 0])  # closest particle distance to x=1
-    min_distance_from_y_max = np.min(y_max - positions[:, 1])  # closest particle distance to y_max
-
-    min_distance = min(min_distance_from_x_max, min_distance_from_y_max,
-                       min_distance_from_zero_x, min_distance_from_zero_y)  # closest particle distance to any wall
-
-    for i in range(np.shape(positions)[0]):  # loop through all positions
-        random_position = positions[i, :]  # pick out a random position
-        diff = positions - np.tile(random_position, reps=(len(positions), 1))  # find distance vectors to other pos
-        diff = norm(diff, axis=1)  # find distance from all distance vectors
-        number_of_zeros = np.sum(diff == 0)  # compute number of zero distance. Should only be one(itself!)
-
-        if number_of_zeros > 1:  # Can happen(maybe?)
-            print('Two particles randomly generated at same point')
-            exit()
-        diff = diff[diff != 0]  # remove the distance a particle has with itself
-        min_distance = min(min_distance, np.min(diff))  # find the closest distance between wall and nearest particle
-    print(min_distance)
-    min_radius = min_distance/2  # divide by two since the distance should equal at least radius*2
-    min_radius *= 0.99  # in order to have no particles connected with either wall or another particle
-    return positions, min_radius
 
 
 def random_positions_for_given_radius(number_of_particles, radius, y_max=1.0, brownian_particle=False):
@@ -140,3 +100,77 @@ def random_uniformly_distributed_velocities(N, v0):
     velocities[:, 0], velocities[:, 1] = np.cos(random_angles), np.sin(random_angles)  # take cosine and sine
     velocities *= v0  # multiply with speed
     return velocities
+
+
+def run_simulations_in_parallel(particle_parameters, simulation_function, number_of_cores,
+                                number_of_runs):
+    Parallel(n_jobs=number_of_cores)(delayed(simulation_function)(particle_parameters, run_number) for run_number
+                                     in range(number_of_runs))
+
+
+def speed_distribution(particle_parameters, run_number):
+    # simulation_parameters = [N, xi, v0, radius]
+    N, xi, v0, r = int(particle_parameters[0]), particle_parameters[1], particle_parameters[2], particle_parameters[3]
+    positions = np.load(os.path.join(init_folder, f'uniform_pos_N_{N}_rad_{r}.npy'))
+    radii = np.ones(N) * r  # all particles have the same radius
+    mass = np.ones(N)  # all particles get initially the same mass
+
+    energy_matrix = np.zeros((N, 2))  # array with mass and speed to save to file
+    energy_matrix[:, 0] = mass
+
+    average_number_of_collisions_stop = N * 0.02
+
+    velocities = random_uniformly_distributed_velocities(N, v0)
+
+    box_of_particles = ParticleBox(number_of_particles=N,
+                                   restitution_coefficient=xi,
+                                   initial_positions=positions,
+                                   initial_velocities=velocities,
+                                   masses=mass,
+                                   radii=radii)
+
+    simulation = Simulation(box_of_particles=box_of_particles, stopping_criterion=average_number_of_collisions_stop)
+    simulation.simulate_until_given_number_of_collisions('speed_distribution',
+                                                         output_timestep=0.1,
+                                                         save_positions=False)
+
+    energy_matrix[:, 1] = norm(simulation.box_of_particles.velocities, axis=1)
+
+    np.save(file=os.path.join(results_folder, f'distributionEqParticles_N_{N}_eq_energy_matrix_{run_number}'),
+            arr=energy_matrix)
+    # np.save(file=os.path.join(init_folder, f'eq_uniform_pos_N_{N}_rad_{r}.npy'),
+    #         arr=simulation.box_of_particles.positions)
+    # np.save(file=os.path.join(init_folder, f'eq_velocity_N_{N}_rad_{r}.npy'),
+    #         arr=simulation.box_of_particles.velocities)
+
+
+def energy_development(particle_parameters, run_number):
+    N, xi, v0, r = int(particle_parameters[0]), particle_parameters[1], particle_parameters[2], particle_parameters[3]
+    positions = np.load(os.path.join(init_folder, f'uniform_pos_N_{N}_rad_{r}.npy'))
+    radii = np.ones(N) * r  # all particles have the same radius
+    mass = np.ones(N)  # all particles get initially the same mass
+
+    t_stop = 10
+
+    # velocities = random_uniformly_distributed_velocities(N, v0)
+    velocities = np.load(os.path.join(init_folder, f'eq_velocity_N_{N}_rad_{r}.npy'))
+
+    box_of_particles = ParticleBox(number_of_particles=N,
+                                   restitution_coefficient=xi,
+                                   initial_positions=positions,
+                                   initial_velocities=velocities,
+                                   masses=mass,
+                                   radii=radii)
+
+    simulation = Simulation(box_of_particles=box_of_particles, stopping_criterion=t_stop)
+    time_array, energy_array, speed_array = simulation.simulate_statistics_until_given_time('eng_development',
+                                                                                            output_timestep=0.01,
+                                                                                            save_positions=False)
+
+    energy_matrix = np.zeros((len(time_array), 3))
+    energy_matrix[:, 0] = time_array
+    energy_matrix[:, 1] = energy_array
+    energy_matrix[:, 2] = speed_array
+
+    np.save(file=os.path.join(results_folder, f'energy_development_N_{N}_xi_{xi}_{run_number}'),
+            arr=energy_matrix)
