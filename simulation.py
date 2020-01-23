@@ -19,7 +19,7 @@ class Simulation:
         since one is interested in different things there are several implementations. The event driven simulation
         is a systematic approach where time is incremented for each valid event.
     """
-    def __init__(self, box_of_particles, stopping_criterion):
+    def __init__(self, box_of_particles, stopping_criterion, tc=0):
         """
             Initialize a simulation with a ParticleBox object and a stopping_criterion
         :param box_of_particles: ParticleBox object with a square box of N particles
@@ -33,7 +33,7 @@ class Simulation:
 
         self.box_of_particles = box_of_particles  # ParticleBox object
         self.simulation_time = 0
-        self.tc = 0  # variable used in the TC model to avoid inelastic collapse. tc=0 => TC model not used
+        self.tc = tc  # variable used in the TC model to avoid inelastic collapse. tc=0 => TC model not used
         # boolean array used to indicate the set of particles to plot in red instead of standard blue. Default: None
         # mask varaible is essentially a boolean array to indicate what particles to use when computing quantities
         self.mask = None  # variable used to indicate whether or not to plot specific particles in separate color
@@ -116,7 +116,7 @@ class Simulation:
         plt.savefig(os.path.join(simulation_folder, f"{picture_number}.png"))
         plt.close()
 
-    def perform_collision(self, time_at_collision, collision_tuple, t_max=None):
+    def perform_collision(self, time_at_collision, collision_tuple, t_max=None, heated_walls=False):
         """
             FUnction that from a collision tuple, performs the collision. Performing a collision consist of updating
             the velocity of the involved particle(s) and update the parameters like collision count, average number of
@@ -139,20 +139,26 @@ class Simulation:
         # update velocities by letting a collision happen
         if object_two == 'hw':
             # update velocity of particle colliding with hw
-            if time_since_previous_collision_part_one < self.tc:
-                # set xi equal to 1 to avoid inelastic collapse by using the TC model
-                self.box_of_particles.collision_horizontal_wall(object_one, 1)
+            if heated_walls:
+                self.box_of_particles.collision_horizontal_wall(object_one, 1.1)
             else:
-                self.box_of_particles.collision_horizontal_wall(object_one,
-                                                                self.box_of_particles.restitution_coefficient)
+                if time_since_previous_collision_part_one < self.tc:
+                    # set xi equal to 1 to avoid inelastic collapse by using the TC model
+                    self.box_of_particles.collision_horizontal_wall(object_one, 1)
+                else:
+                    self.box_of_particles.collision_horizontal_wall(object_one,
+                                                                    self.box_of_particles.restitution_coefficient)
         elif object_two == 'vw':
             # update velocity of particle in colliding with vw
-            if time_since_previous_collision_part_one < self.tc:
-                # set xi equal to 1 to avoid inelastic collapse by using the TC model
-                self.box_of_particles.collision_vertical_wall(object_one, 1)
+            if heated_walls:
+                self.box_of_particles.collision_vertical_wall(object_one, 1.1)
             else:
-                self.box_of_particles.collision_vertical_wall(object_one,
-                                                              self.box_of_particles.restitution_coefficient)
+                if time_since_previous_collision_part_one < self.tc:
+                    # set xi equal to 1 to avoid inelastic collapse by using the TC model
+                    self.box_of_particles.collision_vertical_wall(object_one, 1)
+                else:
+                    self.box_of_particles.collision_vertical_wall(object_one,
+                                                                  self.box_of_particles.restitution_coefficient)
         else:
             time_since_previous_collision_part_two = \
                 time_at_collision - self.time_at_previous_collision[object_two]

@@ -8,6 +8,7 @@ from particle_box import ParticleBox
 from simulation import Simulation
 from config import results_folder, init_folder
 
+import matplotlib.pyplot as plt
 # Various utility functions
 
 
@@ -86,6 +87,14 @@ def validate_positions(positions, radius):
     print(f'Smallest dist: {smallest_distance} 2r: {2 * radius}')
 
 
+def check_speed_distribution(number_of_particles=2000, r=0.007):
+    velocities = np.load(os.path.join(init_folder, f'eq_velocity_N_{number_of_particles}_rad_{r}.npy'))
+    speeds = norm(velocities, axis=1)
+    plt.hist(speeds, bins=100, density=True)
+    plt.title(r'$\langle v \rangle = {}$'.format(np.mean(speeds)))
+    plt.show()
+
+
 def random_uniformly_distributed_velocities(N, v0):
     """
         Function that creates a random set of velocity vectors for N particles with speed v0. First one create random
@@ -102,14 +111,35 @@ def random_uniformly_distributed_velocities(N, v0):
     return velocities
 
 
-def run_simulations_in_parallel(particle_parameters, simulation_function, number_of_cores,
+def run_simulations_in_parallel(particle_parameters, simulation_parameters, simulation_function, number_of_cores,
                                 number_of_runs):
-    Parallel(n_jobs=number_of_cores)(delayed(simulation_function)(particle_parameters, run_number) for run_number
-                                     in range(number_of_runs))
+    Parallel(n_jobs=number_of_cores)(delayed(simulation_function)(particle_parameters, simulation_parameters,
+                                                                  run_number) for run_number in range(number_of_runs))
 
 
-def speed_distribution(particle_parameters, run_number):
-    # simulation_parameters = [N, xi, v0, radius]
+def create_visualization_system(particle_parameters, simulation_parameters, run_number):
+    N, xi, v0, r = int(particle_parameters[0]), particle_parameters[1], particle_parameters[2], particle_parameters[3]
+    t_stop, timestep, tc = simulation_parameters[0], simulation_parameters[1], simulation_parameters[2]
+    positions = np.load(os.path.join(init_folder, f'uniform_pos_N_{N}_rad_{r}.npy'))
+    radii = np.ones(N) * r  # all particles have the same radius
+    mass = np.ones(N)  # all particles get initially the same mass
+
+    velocities = np.load(os.path.join(init_folder, f'eq_velocity_N_{N}_rad_{r}.npy'))
+    np.random.shuffle(velocities)
+
+    box_of_particles = ParticleBox(number_of_particles=N,
+                                   restitution_coefficient=xi,
+                                   initial_positions=positions,
+                                   initial_velocities=velocities,
+                                   masses=mass,
+                                   radii=radii)
+
+    simulation = Simulation(box_of_particles=box_of_particles, stopping_criterion=t_stop, tc=tc)
+    simulation.simulate_statistics_until_given_time(f'visualization_{run_number}', output_timestep=timestep,
+                                                    save_positions=True)
+
+
+def speed_distribution(particle_parameters, simulation_parameters, run_number):
     N, xi, v0, r = int(particle_parameters[0]), particle_parameters[1], particle_parameters[2], particle_parameters[3]
     positions = np.load(os.path.join(init_folder, f'uniform_pos_N_{N}_rad_{r}.npy'))
     radii = np.ones(N) * r  # all particles have the same radius
@@ -144,16 +174,16 @@ def speed_distribution(particle_parameters, run_number):
     #         arr=simulation.box_of_particles.velocities)
 
 
-def energy_development(particle_parameters, run_number):
+def energy_development(particle_parameters, simulation_parameters, run_number):
     N, xi, v0, r = int(particle_parameters[0]), particle_parameters[1], particle_parameters[2], particle_parameters[3]
+    t_stop, timestep, tc = simulation_parameters[0], simulation_parameters[1], simulation_parameters[2]
     positions = np.load(os.path.join(init_folder, f'uniform_pos_N_{N}_rad_{r}.npy'))
     radii = np.ones(N) * r  # all particles have the same radius
     mass = np.ones(N)  # all particles get initially the same mass
 
-    t_stop = 10
-
     # velocities = random_uniformly_distributed_velocities(N, v0)
     velocities = np.load(os.path.join(init_folder, f'eq_velocity_N_{N}_rad_{r}.npy'))
+    np.random.shuffle(velocities)
 
     box_of_particles = ParticleBox(number_of_particles=N,
                                    restitution_coefficient=xi,
@@ -162,9 +192,9 @@ def energy_development(particle_parameters, run_number):
                                    masses=mass,
                                    radii=radii)
 
-    simulation = Simulation(box_of_particles=box_of_particles, stopping_criterion=t_stop)
+    simulation = Simulation(box_of_particles=box_of_particles, stopping_criterion=t_stop, tc=tc)
     time_array, energy_array, speed_array = simulation.simulate_statistics_until_given_time('eng_development',
-                                                                                            output_timestep=0.01,
+                                                                                            output_timestep=timestep,
                                                                                             save_positions=False)
 
     energy_matrix = np.zeros((len(time_array), 3))
@@ -172,5 +202,7 @@ def energy_development(particle_parameters, run_number):
     energy_matrix[:, 1] = energy_array
     energy_matrix[:, 2] = speed_array
 
-    np.save(file=os.path.join(results_folder, f'energy_development_N_{N}_xi_{xi}_{run_number}'),
+    np.save(file=os.path.join(results_folder, f'energy_development_N_{N}_xi_{xi}_tstop_{t_stop}_{run_number}'),
             arr=energy_matrix)
+    # np.save(file=os.path.join(results_folder, f'positions_t_{t_stop}_N_{N}_xi_{xi}_tstop_{run_number}'),
+    #         arr=simulation.box_of_particles.positions)
