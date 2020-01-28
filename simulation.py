@@ -33,6 +33,7 @@ class Simulation:
 
         self.box_of_particles = box_of_particles  # ParticleBox object
         self.simulation_time = 0
+        self.max_length_collisions_queue = 1e+7
         self.tc = tc  # variable used in the TC model to avoid inelastic collapse. tc=0 => TC model not used
         # boolean array used to indicate the set of particles to plot in red instead of standard blue. Default: None
         # mask varaible is essentially a boolean array to indicate what particles to use when computing quantities
@@ -61,7 +62,7 @@ class Simulation:
         print(f"Avg energy: {avg_energy}")
         print(f"Average number of collisions: {average_number_of_collisions}")
 
-    def create_simulation_folder(self, simulation_label):
+    def create_simulation_folder(self, simulation_label, timestep):
         """
             Function used to create a folder for the plots produced by save_particle_positions. The function creates a
             name based on the simulation_label and some simulation parameters. If the folder already exists, it is
@@ -71,7 +72,7 @@ class Simulation:
         """
         simulation_folder = os.path.join(plots_folder, 'simulation_' + simulation_label +
                                          f'_N_{self.box_of_particles.N}'
-                                         f'_xi_{self.box_of_particles.restitution_coefficient}')
+                                         f'_xi_{self.box_of_particles.restitution_coefficient}_dt_{timestep}')
         if not os.path.isdir(simulation_folder):
             os.mkdir(simulation_folder)
         else:
@@ -79,11 +80,11 @@ class Simulation:
             os.mkdir(simulation_folder)
         return simulation_folder
 
-    def save_particle_positions(self, simulation_folder, picture_number):
+    def save_particle_positions(self, simulation_folder, output_number):
         """
             Function to save particle positions as a png image at a output time
         :param simulation_folder: folder to save png images
-        :param picture_number: int parameters stating what picture is saved in order to keep order easily
+        :param output_number: int parameters stating what picture is saved in order to keep order easily
         """
         fig, ax = plt.subplots()
         ax.plot([0, 1, 1, 0, 0], [0, 0, 1, 1, 0], 'k')
@@ -113,8 +114,9 @@ class Simulation:
 
         ax.set_xlim([-0.05, 1.05])
         ax.set_ylim([-0.05, 1.05])
-        plt.savefig(os.path.join(simulation_folder, f"{picture_number}.png"))
+        plt.savefig(os.path.join(simulation_folder, f"{output_number}.png"))
         plt.close()
+        np.save(file=os.path.join(simulation_folder, f"positions_{output_number}"), arr=self.box_of_particles.positions)
 
     def perform_collision(self, time_at_collision, collision_tuple, t_max=None, heated_walls=False):
         """
@@ -182,6 +184,11 @@ class Simulation:
         self.time_at_previous_collision[object_one] = time_at_collision  # add time at collision
         # update average number of collisions since one or two particles have been in a collision
         self.average_number_of_collisions = np.mean(self.box_of_particles.collision_count_particles)
+
+        # if the collision_queue has too many entries, it is reset and initialized as in the start of the simulations
+        if len(self.box_of_particles.collision_queue) > self.max_length_collisions_queue:
+            self.box_of_particles.collision_queue = []
+            self.box_of_particles.create_initial_priority_queue(t_max)
 
     def simulate_until_given_number_of_collisions(self, simulation_label, output_timestep=1.0, save_positions=True):
         """
@@ -260,7 +267,7 @@ class Simulation:
         # create folder in order to save particle positions as a png files throughout the simulation
         simulation_folder = ""
         if save_positions:
-            simulation_folder = self.create_simulation_folder(simulation_label)
+            simulation_folder = self.create_simulation_folder(simulation_label, output_timestep)
 
         print('Creating initial queue..')
 
