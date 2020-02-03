@@ -132,9 +132,9 @@ def create_visualization_system(particle_parameters, simulation_parameters, run_
     radii = np.ones(N) * r  # all particles have the same radius
     mass = np.ones(N)  # all particles get initially the same mass
 
-    # velocities = random_uniformly_distributed_velocities(N, v0)
-    velocities = np.load(os.path.join(init_folder, f'eq_velocity_N_{N}_rad_{r}.npy'))
-    np.random.shuffle(velocities)
+    velocities = random_uniformly_distributed_velocities(N, v0)
+    # velocities = np.load(os.path.join(init_folder, f'eq_velocity_N_{N}_rad_{r}.npy'))
+    # np.random.shuffle(velocities)
 
     box_of_particles = ParticleBox(number_of_particles=N,
                                    restitution_coefficient=xi,
@@ -197,10 +197,10 @@ def speed_distribution(particle_parameters, simulation_parameters, run_number):
 
     energy_matrix[:, 1] = norm(simulation.box_of_particles.velocities, axis=1)
 
-    np.save(file=os.path.join(results_folder, f'distributionEqParticles_N_{N}_eq_energy_matrix_{run_number}'),
-            arr=energy_matrix)
-    # np.save(file=os.path.join(init_folder, f'eq_velocity_N_{N}_rad_{r}.npy'),
-    #         arr=simulation.box_of_particles.velocities)
+    # np.save(file=os.path.join(results_folder, f'distributionEqParticles_N_{N}_eq_energy_matrix_{run_number}'),
+    #         arr=energy_matrix)
+    np.save(file=os.path.join(init_folder, f'eq_velocity_N_{N}_rad_{r}.npy'),
+            arr=simulation.box_of_particles.velocities)
 
 
 def energy_development(particle_parameters, simulation_parameters, run_number):
@@ -208,7 +208,7 @@ def energy_development(particle_parameters, simulation_parameters, run_number):
     t_stop, timestep, tc = simulation_parameters[0], simulation_parameters[1], simulation_parameters[2]
     positions = np.load(os.path.join(init_folder, f'uniform_pos_N_{N}_rad_{r}.npy'))
     radii = np.ones(N) * r  # all particles have the same radius
-    mass = np.ones(N)  # all particles get initially the same mass
+    mass = np.ones(N)*4  # all particles get initially the same mass
 
     # velocities = random_uniformly_distributed_velocities(N, v0)
     velocities = np.load(os.path.join(init_folder, f'eq_velocity_N_{N}_rad_{r}.npy'))

@@ -86,37 +86,39 @@ class Simulation:
         :param simulation_folder: folder to save png images
         :param output_number: int parameters stating what picture is saved in order to keep order easily
         """
-        fig, ax = plt.subplots()
-        ax.plot([0, 1, 1, 0, 0], [0, 0, 1, 1, 0], 'k')
-        if self.mask is None:
-            coll = matplotlib.collections.EllipseCollection(self.box_of_particles.radii * 2,
-                                                            self.box_of_particles.radii * 2,
-                                                            np.zeros_like(self.box_of_particles.radii),
-                                                            offsets=self.box_of_particles.positions, units='width',
-                                                            transOffset=ax.transData)
-            ax.add_collection(coll)
-
-        else:
-            coll_1 = matplotlib.collections.EllipseCollection(self.box_of_particles.radii[~self.mask] * 2,
-                                                              self.box_of_particles.radii[~self.mask] * 2,
-                                                              np.zeros_like(self.box_of_particles.radii[~self.mask]),
-                                                              offsets=self.box_of_particles.positions[~self.mask, :],
-                                                              units='width',
-                                                              transOffset=ax.transData)
-            coll_2 = matplotlib.collections.EllipseCollection(self.box_of_particles.radii[self.mask] * 2,
-                                                              self.box_of_particles.radii[self.mask] * 2,
-                                                              np.zeros_like(self.box_of_particles.radii[self.mask]),
-                                                              offsets=self.box_of_particles.positions[self.mask, :],
-                                                              units='width',
-                                                              transOffset=ax.transData, facecolors='red')
-            ax.add_collection(coll_1)
-            ax.add_collection(coll_2)
-
-        ax.set_xlim([-0.05, 1.05])
-        ax.set_ylim([-0.05, 1.05])
-        plt.savefig(os.path.join(simulation_folder, f"{output_number}.png"))
-        plt.close()
+        # fig, ax = plt.subplots()
+        # ax.plot([0, 1, 1, 0, 0], [0, 0, 1, 1, 0], 'k')
+        # if self.mask is None:
+        #     coll = matplotlib.collections.EllipseCollection(self.box_of_particles.radii * 2,
+        #                                                     self.box_of_particles.radii * 2,
+        #                                                     np.zeros_like(self.box_of_particles.radii),
+        #                                                     offsets=self.box_of_particles.positions, units='width',
+        #                                                     transOffset=ax.transData)
+        #     ax.add_collection(coll)
+        #
+        # else:
+        #     coll_1 = matplotlib.collections.EllipseCollection(self.box_of_particles.radii[~self.mask] * 2,
+        #                                                       self.box_of_particles.radii[~self.mask] * 2,
+        #                                                       np.zeros_like(self.box_of_particles.radii[~self.mask]),
+        #                                                       offsets=self.box_of_particles.positions[~self.mask, :],
+        #                                                       units='width',
+        #                                                       transOffset=ax.transData)
+        #     coll_2 = matplotlib.collections.EllipseCollection(self.box_of_particles.radii[self.mask] * 2,
+        #                                                       self.box_of_particles.radii[self.mask] * 2,
+        #                                                       np.zeros_like(self.box_of_particles.radii[self.mask]),
+        #                                                       offsets=self.box_of_particles.positions[self.mask, :],
+        #                                                       units='width',
+        #                                                       transOffset=ax.transData, facecolors='red')
+        #     ax.add_collection(coll_1)
+        #     ax.add_collection(coll_2)
+        #
+        # ax.set_xlim([-0.05, 1.05])
+        # ax.set_ylim([-0.05, 1.05])
+        # plt.savefig(os.path.join(simulation_folder, f"{output_number}.png"))
+        # plt.close()
         np.save(file=os.path.join(simulation_folder, f"positions_{output_number}"), arr=self.box_of_particles.positions)
+        np.save(file=os.path.join(simulation_folder, f"collision_count_{output_number}"),
+                arr=self.box_of_particles.collision_count_particles)
 
     def perform_collision(self, time_at_collision, collision_tuple, t_max=None, heated_walls=False):
         """
