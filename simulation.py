@@ -33,7 +33,7 @@ class Simulation:
 
         self.box_of_particles = box_of_particles  # ParticleBox object
         self.simulation_time = 0
-        self.max_length_collisions_queue = 1e+7
+        self.max_length_collisions_queue = 1e+8
         self.tc = tc  # variable used in the TC model to avoid inelastic collapse. tc=0 => TC model not used
         # boolean array used to indicate the set of particles to plot in red instead of standard blue. Default: None
         # mask varaible is essentially a boolean array to indicate what particles to use when computing quantities
@@ -86,41 +86,41 @@ class Simulation:
         :param simulation_folder: folder to save png images
         :param output_number: int parameters stating what picture is saved in order to keep order easily
         """
-        # fig, ax = plt.subplots()
-        # ax.plot([0, 1, 1, 0, 0], [0, 0, 1, 1, 0], 'k')
-        # if self.mask is None:
-        #     coll = matplotlib.collections.EllipseCollection(self.box_of_particles.radii * 2,
-        #                                                     self.box_of_particles.radii * 2,
-        #                                                     np.zeros_like(self.box_of_particles.radii),
-        #                                                     offsets=self.box_of_particles.positions, units='width',
-        #                                                     transOffset=ax.transData)
-        #     ax.add_collection(coll)
-        #
-        # else:
-        #     coll_1 = matplotlib.collections.EllipseCollection(self.box_of_particles.radii[~self.mask] * 2,
-        #                                                       self.box_of_particles.radii[~self.mask] * 2,
-        #                                                       np.zeros_like(self.box_of_particles.radii[~self.mask]),
-        #                                                       offsets=self.box_of_particles.positions[~self.mask, :],
-        #                                                       units='width',
-        #                                                       transOffset=ax.transData)
-        #     coll_2 = matplotlib.collections.EllipseCollection(self.box_of_particles.radii[self.mask] * 2,
-        #                                                       self.box_of_particles.radii[self.mask] * 2,
-        #                                                       np.zeros_like(self.box_of_particles.radii[self.mask]),
-        #                                                       offsets=self.box_of_particles.positions[self.mask, :],
-        #                                                       units='width',
-        #                                                       transOffset=ax.transData, facecolors='red')
-        #     ax.add_collection(coll_1)
-        #     ax.add_collection(coll_2)
-        #
-        # ax.set_xlim([-0.05, 1.05])
-        # ax.set_ylim([-0.05, 1.05])
-        # plt.savefig(os.path.join(simulation_folder, f"{output_number}.png"))
-        # plt.close()
-        np.save(file=os.path.join(simulation_folder, f"positions_{output_number}"), arr=self.box_of_particles.positions)
-        np.save(file=os.path.join(simulation_folder, f"collision_count_{output_number}"),
-                arr=self.box_of_particles.collision_count_particles)
+        fig, ax = plt.subplots()
+        ax.plot([0, 1, 1, 0, 0], [0, 0, 1, 1, 0], 'k')
+        if self.mask is None:
+            coll = matplotlib.collections.EllipseCollection(self.box_of_particles.radii * 2,
+                                                            self.box_of_particles.radii * 2,
+                                                            np.zeros_like(self.box_of_particles.radii),
+                                                            offsets=self.box_of_particles.positions, units='width',
+                                                            transOffset=ax.transData)
+            ax.add_collection(coll)
 
-    def perform_collision(self, time_at_collision, collision_tuple, t_max=None, heated_walls=False):
+        else:
+            coll_1 = matplotlib.collections.EllipseCollection(self.box_of_particles.radii[~self.mask] * 2,
+                                                              self.box_of_particles.radii[~self.mask] * 2,
+                                                              np.zeros_like(self.box_of_particles.radii[~self.mask]),
+                                                              offsets=self.box_of_particles.positions[~self.mask, :],
+                                                              units='width',
+                                                              transOffset=ax.transData)
+            coll_2 = matplotlib.collections.EllipseCollection(self.box_of_particles.radii[self.mask] * 2,
+                                                              self.box_of_particles.radii[self.mask] * 2,
+                                                              np.zeros_like(self.box_of_particles.radii[self.mask]),
+                                                              offsets=self.box_of_particles.positions[self.mask, :],
+                                                              units='width',
+                                                              transOffset=ax.transData, facecolors='red')
+            ax.add_collection(coll_1)
+            ax.add_collection(coll_2)
+
+        ax.set_xlim([-0.15, 1.15])
+        ax.set_ylim([-0.15, 1.15])
+        plt.savefig(os.path.join(simulation_folder, f"{output_number}.png"))
+        plt.close()
+        # np.save(file=os.path.join(simulation_folder, f"positions_{output_number}"), arr=self.box_of_particles.positions)
+        # np.save(file=os.path.join(simulation_folder, f"collision_count_{output_number}"),
+        #         arr=self.box_of_particles.collision_count_particles)
+
+    def perform_collision(self, time_at_collision, collision_tuple, t_max=None, heated_walls=True):
         """
             FUnction that from a collision tuple, performs the collision. Performing a collision consist of updating
             the velocity of the involved particle(s) and update the parameters like collision count, average number of
@@ -144,7 +144,7 @@ class Simulation:
         if object_two == 'hw':
             # update velocity of particle colliding with hw
             if heated_walls:
-                self.box_of_particles.collision_horizontal_wall(object_one, 1.1)
+                self.box_of_particles.collision_horizontal_wall(object_one, 1)
             else:
                 if time_since_previous_collision_part_one < self.tc:
                     # set xi equal to 1 to avoid inelastic collapse by using the TC model
@@ -155,7 +155,7 @@ class Simulation:
         elif object_two == 'vw':
             # update velocity of particle in colliding with vw
             if heated_walls:
-                self.box_of_particles.collision_vertical_wall(object_one, 1.1)
+                self.box_of_particles.collision_vertical_wall(object_one, 1)
             else:
                 if time_since_previous_collision_part_one < self.tc:
                     # set xi equal to 1 to avoid inelastic collapse by using the TC model
@@ -170,12 +170,13 @@ class Simulation:
             if time_since_previous_collision_part_one < self.tc or \
                     time_since_previous_collision_part_two < self.tc:
                 # in order to avoid inelastic collapse use xi=1 and use the TC model
-                self.box_of_particles.collision_particles(object_one, object_two, 1)
+                self.box_of_particles.collision_particles(object_one, object_two, 1, collision_tuple[3][1])
             else:
                 self.box_of_particles.collision_particles(object_one, object_two,
-                                                          self.box_of_particles.restitution_coefficient)
+                                                          self.box_of_particles.restitution_coefficient, collision_tuple[3][1])
 
         self.box_of_particles.collision_count_particles[object_one] += 1  # update collision count
+        # self.box_of_particles.adjust_all_positions()
         if object_two not in ['hw', 'vw']:  # if there is a second particle involved
             self.box_of_particles.collision_count_particles[object_two] += 1  # update collision count
             # get new collisions for object two
@@ -208,7 +209,7 @@ class Simulation:
         # create folder in order to save particle positions as a png files throughout the simulation
         simulation_folder = ""
         if save_positions:
-            simulation_folder = self.create_simulation_folder(simulation_label)
+            simulation_folder = self.create_simulation_folder(simulation_label, output_timestep)
 
         print('Creating initial queue..')
         next_output_time = 0  # value that keeps track of when the next output will occur
@@ -240,6 +241,7 @@ class Simulation:
 
                 # give output and save particle positions
                 self.print_output(self.average_number_of_collisions, avg_energy)
+                # print(self.box_of_particles.velocities[0, :], self.box_of_particles.velocities[1, :], self.box_of_particles.velocities[2, :])
                 if save_positions:
                     self.save_particle_positions(simulation_folder, output_number)
 
@@ -396,8 +398,7 @@ class Simulation:
         print('Simulation done!')
         print('---------------------')
 
-    def simulate_until_given_time_mask_quantities(self, simulation_label, output_timestep=1.0,
-                                                  update_positions=False, save_positions=True):
+    def simulate_until_given_time_mask_quantities(self, simulation_label, output_timestep=1.0, save_positions=True):
         """
             Implementation of the event driven simulation where the stopping criterion is given as a limit of
             how much one want the simulation time to be. Is useful when looking at a property as a function of time.
@@ -416,7 +417,7 @@ class Simulation:
         # create folder in order to save particle positions as a png files throughout the simulation
         simulation_folder = ""
         if save_positions:
-            simulation_folder = self.create_simulation_folder(simulation_label)
+            simulation_folder = self.create_simulation_folder(simulation_label, output_timestep)
 
         print('Creating initial queue..')
 
@@ -428,8 +429,8 @@ class Simulation:
         # initial energy for all particles, m0 particles and m particles
         avg_energy = self.box_of_particles.compute_energy()
 
-        if self.mask is None:
-            # pick all particles inside a circle from center with radius 0.1 by turning mask into boolean array
+        if self.mask is not None:
+            # pick all particles inside a circle from center with radius 0.2 by turning mask into boolean array
             distance_to_middle_position = norm((self.box_of_particles.positions -
                                                 np.tile([0.5, 0.5], reps=(len(self.box_of_particles.positions), 1))),
                                                axis=1)
@@ -462,10 +463,16 @@ class Simulation:
                 time_array[output_number] = self.simulation_time
 
                 # compute mean quadratic distance from starting position for masked particles
+                # mean_quadratic_distance_array[output_number] = \
+                #     np.mean(
+                #         norm(self.box_of_particles.positions[self.mask]-self.box_of_particles.old_positions[self.mask],
+                #              axis=1)**2)
+                actual_positions = self.box_of_particles.positions + self.box_of_particles.crossings
                 mean_quadratic_distance_array[output_number] = \
                     np.mean(
-                        norm(self.box_of_particles.positions[self.mask]-self.box_of_particles.old_positions[self.mask],
-                             axis=1)**2)
+                        norm(
+                            actual_positions - self.box_of_particles.old_positions,
+                            axis=1) ** 2)
                 # compute mean_quadratic_speed for masked particles
                 mean_quadratic_speed_array[output_number] = \
                     np.mean(norm(self.box_of_particles.velocities[self.mask], axis=1)**2)
@@ -483,22 +490,6 @@ class Simulation:
 
             if self.box_of_particles.valid_collision(collision_tuple):
                 self.perform_collision(time_at_collision, collision_tuple, t_max=self.stopping_criterion)
-                if update_positions:
-                    object_one = collision_tuple[1][0]
-                    object_two = collision_tuple[1][1]
-                    distance_moved_object = norm(
-                        self.box_of_particles.positions[object_one, :] - self.box_of_particles.old_positions[
-                                                                         object_one, :])
-                    self.box_of_particles.distance_to_collisions[object_one] += distance_moved_object
-                    self.box_of_particles.old_positions[object_one, :] = self.box_of_particles.positions[object_one, :]
-                    if object_two not in ["hw", "vw"]:
-                        distance_moved_object = norm(
-                            self.box_of_particles.positions[object_two, :] - self.box_of_particles.old_positions[
-                                                                             object_two, :])
-                        self.box_of_particles.distance_to_collisions[object_two] += distance_moved_object
-
-                        self.box_of_particles.old_positions[object_two, :] =\
-                            self.box_of_particles.positions[object_two, :]
 
         print('Simulation done!')
         print('---------------------')

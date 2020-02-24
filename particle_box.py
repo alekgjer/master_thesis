@@ -44,13 +44,22 @@ class ParticleBox:
         # the involved particles being in other collisions between computation and collision.
         self.collision_queue = []  # heap queue needs list structure to work
 
+        self.offsets = [(-1, 1), (0, 1), (1, 1), (-1, 0), (0, 0), (1, 0), (-1, -1), (0, -1), (1, -1)]
+        self.crossings = np.zeros((self.N, 2))
+
     def collision_horizontal_wall(self, particle_number, restitution_coefficient):
         """
             Function to solve a collision with a particle and a horizontal wall by updating the velocity vector
         :param particle_number: the index of a particle in order to retrieve and/or update the particle data
         :param restitution_coefficient: number giving how much energy is lost during a collision.
         """
-        self.velocities[particle_number, :] *= restitution_coefficient*np.array([1, -1])
+        # self.velocities[particle_number, :] *= restitution_coefficient*np.array([1, -1])
+        if self.positions[particle_number, 1] > 0.5:
+            self.positions[particle_number, 1] -= 1
+            self.crossings[particle_number, 1] += 1
+        else:
+            self.positions[particle_number, 1] += 1
+            self.crossings[particle_number, 1] -= 1
 
     def collision_vertical_wall(self, particle_number, restitution_coefficient):
         """
@@ -58,24 +67,62 @@ class ParticleBox:
         :param particle_number: the index of a particle in order to retrieve and/or update the particle data
         :param restitution_coefficient: number giving how much energy is lost during a collision.
         """
-        self.velocities[particle_number, :] *= restitution_coefficient * np.array([-1, 1])
+        # self.velocities[particle_number, :] *= restitution_coefficient * np.array([-1, 1])
+        if self.positions[particle_number, 0] > 0.5:
+            self.positions[particle_number, 0] -= 1
+            self.crossings[particle_number, 0] += 1
+        else:
+            self.positions[particle_number, 0] += 1
+            self.crossings[particle_number] -= 1
 
-    def collision_particles(self, particle_one, particle_two, restitution_coefficient):
+    def collision_particles(self, particle_one, particle_two, restitution_coefficient, box_part_two):
         """
             Function to solve a collision between two particles by updating the velocity vector for both particles
         :param particle_one: the index of particle number one
         :param particle_two: the index of particle number two
         :param restitution_coefficient: number giving how much energy is lost during a collision.
         """
+        pos_part_two = self.positions[particle_two, :]
+        if box_part_two != 4:
+            pos_part_two += [self.offsets[box_part_two][0], self.offsets[box_part_two][1]]
+
         mass_particle_one, mass_particle_two = self.masses[particle_one], self.masses[particle_two]  # get masses
-        delta_x = self.positions[particle_two, :] - self.positions[particle_one, :]  # difference in position
+        delta_x = pos_part_two - self.positions[particle_one, :]  # difference in position
         delta_v = self.velocities[particle_two, :] - self.velocities[particle_one, :]  # difference in velocity
         r_squared = (self.radii[particle_one] + self.radii[particle_two]) ** 2  # distance from center to center
+
         # update velocities of the particles
         self.velocities[particle_one, :] += delta_x*((1+restitution_coefficient)*mass_particle_two*np.dot(delta_v, delta_x)/((mass_particle_one+mass_particle_two)*r_squared))
         self.velocities[particle_two, :] -= delta_x*((1+restitution_coefficient)*mass_particle_one*np.dot(delta_v, delta_x)/((mass_particle_one+mass_particle_two)*r_squared))
 
-    def time_at_collision_vertical_wall(self, particle_number, simulation_time):
+    def adjust_all_positions(self):
+        neg_boolean_pos_x = self.positions[:, 0] < self.radii
+        pos_boolean_pos_x = self.positions[:, 0] > (1-self.radii)
+        pos_boolean_pos_y = self.positions[:, 1] > (1-self.radii)
+        neg_boolean_pos_y = self.positions[:, 1] < self.radii
+        # neg_boolean_pos_x = self.positions[:, 0] < 0
+        # pos_boolean_pos_x = self.positions[:, 0] > 1
+        # pos_boolean_pos_y = self.positions[:, 1] > 1
+        # neg_boolean_pos_y = self.positions[:, 1] < 0
+        vel_zeros = np.zeros(self.N)
+        neg_vel_x = self.velocities[:, 0] < vel_zeros
+        pos_vel_x = self.velocities[:, 0] > vel_zeros
+        pos_vel_y = self.velocities[:, 1] > vel_zeros
+        neg_vel_y = self.velocities[:, 1] < vel_zeros
+        move_left = np.logical_and(neg_boolean_pos_x, neg_vel_x)
+        self.vertical_box_crossings[move_left] -= 1
+        move_right = np.logical_and(pos_boolean_pos_x, pos_vel_x)
+        self.vertical_box_crossings[move_right] += 1
+        move_up = np.logical_and(neg_boolean_pos_y, neg_vel_y)
+        self.horizontal_box_crossings[move_up] -= 1
+        move_down = np.logical_and(pos_boolean_pos_y, pos_vel_y)
+        self.horizontal_box_crossings[move_down] += 1
+        self.positions[move_left, 0] += 1
+        self.positions[move_right, 0] -= 1
+        self.positions[move_up, 1] += 1
+        self.positions[move_down, 1] -= 1
+
+    def time_at_collision_vertical_wall(self, particle_number, simulation_time, pbc=True):
         """
             Function that computes at what time a particle will collide with a vertical wall
         :param particle_number: the index of a particle in order to retrieve and/or update the particle data
@@ -85,6 +132,8 @@ class ParticleBox:
         velocity_x = self.velocities[particle_number, 0]  # velocity in the x-direction for the particle
         position_x = self.positions[particle_number, 0]  # x-position of the particle
         radius = self.radii[particle_number]  # radius of the particle
+        if pbc:
+            radius = 0
         # compute time until collision
         if velocity_x > 0:
             time_until_collision = (1-radius-position_x) / velocity_x
@@ -94,7 +143,7 @@ class ParticleBox:
             time_until_collision = np.inf
         return time_until_collision + simulation_time
 
-    def time_at_collision_horizontal_wall(self, particle_number, simulation_time):
+    def time_at_collision_horizontal_wall(self, particle_number, simulation_time, pbc=True):
         """
             Function that computes at what time a particle will collide with a horizontal wall
         :param particle_number: the index of a particle in order to retrieve and/or update the particle data
@@ -104,6 +153,8 @@ class ParticleBox:
         velocity_y = self.velocities[particle_number, 1]  # velocity in the y-direction of the particle
         position_y = self.positions[particle_number, 1]  # y position of the particle
         radius = self.radii[particle_number]  # radius of the particle
+        if pbc:
+            radius = 0
         # compute time until collision
         if velocity_y > 0:
             time_until_collision = (1 - radius - position_y) / velocity_y
@@ -136,6 +187,29 @@ class ParticleBox:
             time_until_collisions[boolean] = -1 * ((dvdx[boolean] + np.sqrt(d[boolean])) / (dvdv[boolean]))
         return time_until_collisions + simulation_time
 
+    def time_at_collision_particles_pbc(self, particle_number, simulation_time):
+        positions = np.zeros((len(self.positions)*9, 2))
+        for i, offset in enumerate(self.offsets):
+            positions[i*len(self.positions):(i+1)*len(self.positions)] = self.positions + np.array([offset[0], offset[1]])
+        # difference from particle particle_number to all other particles
+        delta_x = positions - np.tile(self.positions[particle_number, :], reps=(len(positions), 1))
+        # difference in velocity from particle particle_number to all other particles
+        delta_v = self.velocities - np.tile(self.velocities[particle_number, :], reps=(len(self.velocities), 1))
+        delta_v = np.tile(delta_v, reps=(9, 1))
+        r_squared = (self.radii[particle_number] + self.radii) ** 2  # array of center to center distances
+        #r_squared = r_squared[:, np.newaxis]
+        r_squared = np.tile(r_squared, reps=(9, ))
+        dvdx = np.sum(delta_v * delta_x, axis=1)  # dot product between delta_v and delta_x
+        dvdv = np.sum(delta_v * delta_v, axis=1)  # dot product between delta_v and delta_v
+        d = dvdx ** 2 - dvdv * (norm(delta_x, axis=1) ** 2 - r_squared)  # help array quantity
+        time_until_collisions = np.ones(self.N*9) * np.inf  # assume no particles is going to collide
+        boolean = np.logical_and(dvdx < 0, d > 0)  # both these conditions must be valid particle-particle collision
+        # check if there exist some valid particle-particle collisions for particle particle_number
+        if np.sum(boolean) > 0:
+            # compute time until collision
+            time_until_collisions[boolean] = -1 * ((dvdx[boolean] + np.sqrt(d[boolean])) / (dvdv[boolean]))
+        return time_until_collisions + simulation_time
+
     def add_collision_horizontal_wall_to_queue(self, particle_number, simulation_time):
         """
             Help function to compute time at collision with horizontal wall for a given particle, create collision
@@ -145,7 +219,7 @@ class ParticleBox:
         """
         time_hw = self.time_at_collision_horizontal_wall(particle_number, simulation_time)  # time at collision
         # create collision tuple on desired form
-        tuple_hw = (time_hw, [particle_number, 'hw'], [self.collision_count_particles[particle_number]])
+        tuple_hw = (time_hw, [particle_number, 'hw'], [self.collision_count_particles[particle_number]], [4])
         # push to heap queue
         heapq.heappush(self.collision_queue, tuple_hw)
 
@@ -158,11 +232,11 @@ class ParticleBox:
         """
         time_vw = self.time_at_collision_vertical_wall(particle_number, simulation_time)  # time at collision
         # create collision tuple on desired form
-        tuple_vw = (time_vw, [particle_number, 'vw'], [self.collision_count_particles[particle_number]])
+        tuple_vw = (time_vw, [particle_number, 'vw'], [self.collision_count_particles[particle_number]], [4])
         # push to heap queue
         heapq.heappush(self.collision_queue, tuple_vw)
 
-    def add_collisions_particle_to_queue(self, particle_number, simulation_time, t_max):
+    def add_collisions_particle_to_queue(self, particle_number, simulation_time, t_max, pbc=True):
         """
             Help function to compute time at collision with all particles for a given particle, create collision
             tuples and push valid tuples into the heap queue.
@@ -171,18 +245,25 @@ class ParticleBox:
         :param t_max: is a float containing the stopping criterion of the simulation in time. Is used to neglect
         collisions if they occur later than t_max*1.01. Default to None: use all. Exist if simulation until t_stop.
         """
-        time_at_collisions = self.time_at_collision_particles(particle_number, simulation_time)  # get time collisions
-        collision_particles = np.arange(self.N)  # create a list of possible collision candidates
+        if pbc:
+            time_at_collisions = self.time_at_collision_particles_pbc(particle_number, simulation_time)
+            collision_particles = np.tile(np.arange(self.N), reps=(9, ))
+            boxes = np.repeat(np.arange(0, 9), self.N)
+        else:
+            time_at_collisions = self.time_at_collision_particles(particle_number, simulation_time)  # get time collisions
+            collision_particles = np.arange(self.N)  # create a list of possible collision candidates
+            boxes = np.repeat(4, self.N)
         # only regard valid collisions by removing all entries which are np.inf
         if t_max is None:
             boolean = time_at_collisions != np.inf
-            collision_particles = collision_particles[boolean]
-            time_at_collisions = time_at_collisions[boolean]
+            # collision_particles = collision_particles[boolean]
+            # time_at_collisions = time_at_collisions[boolean]
         else:
             boolean = np.logical_and(time_at_collisions != np.inf, time_at_collisions < t_max*1.01)
-            collision_particles = collision_particles[boolean]
-            time_at_collisions = time_at_collisions[boolean]
 
+        collision_particles = collision_particles[boolean]
+        time_at_collisions = time_at_collisions[boolean]
+        boxes = boxes[boolean]
         # check if there are any valid collisions
         if len(time_at_collisions) > 0:
             # iterate through all valid collisions
@@ -190,7 +271,8 @@ class ParticleBox:
                 # create collision tuple of valid form
                 tuple_particle_collision = (time_at_collisions[i], [particle_number, collision_particles[i]],
                                             [self.collision_count_particles[particle_number],
-                                             self.collision_count_particles[collision_particles[i]]])
+                                             self.collision_count_particles[collision_particles[i]]],
+                                            [4, boxes[i]])
                 # push tuple to heap queue
                 heapq.heappush(self.collision_queue, tuple_particle_collision)
 

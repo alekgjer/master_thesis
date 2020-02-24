@@ -90,8 +90,17 @@ def validate_positions(positions, radius):
 def check_speed_distribution(number_of_particles=2000, r=0.007):
     velocities = np.load(os.path.join(init_folder, f'eq_velocity_N_{number_of_particles}_rad_{r}.npy'))
     speeds = norm(velocities, axis=1)
+    avg_speed = np.mean(speeds)
+    avg_quadratic_speed = np.mean(speeds**2)
+    print(f'Var: {np.var(speeds)}')
+    print(f'<v>^2: {avg_speed**2}')
+    print(f'<v^2>: {avg_quadratic_speed}')
+    v = np.linspace(0, 1, 100)
+    alpha = 1/avg_quadratic_speed
+    p = 2*alpha*v*np.exp(-alpha*v**2)
     plt.hist(speeds, bins=100, density=True)
-    plt.title(r'$\langle v \rangle = {}$'.format(np.mean(speeds)))
+    plt.plot(v, p)
+    plt.title(r'$\langle v \rangle = {}$'.format(avg_speed))
     plt.show()
 
 
@@ -129,12 +138,16 @@ def create_visualization_system(particle_parameters, simulation_parameters, run_
     N, xi, v0, r = int(particle_parameters[0]), particle_parameters[1], particle_parameters[2], particle_parameters[3]
     t_stop, timestep, tc = simulation_parameters[0], simulation_parameters[1], simulation_parameters[2]
     positions = np.load(os.path.join(init_folder, f'uniform_pos_N_{N}_rad_{r}.npy'))
-    radii = np.ones(N) * r  # all particles have the same radius
+    radii = np.ones(N) * 0.004  # all particles have the same radius
     mass = np.ones(N)  # all particles get initially the same mass
 
     velocities = random_uniformly_distributed_velocities(N, v0)
     # velocities = np.load(os.path.join(init_folder, f'eq_velocity_N_{N}_rad_{r}.npy'))
     # np.random.shuffle(velocities)
+
+    # pick all particles inside a circle from center with radius 0.2 by turning mask into boolean array
+    distance_to_middle_position = norm((positions - np.tile([0.5, 0.5], reps=(len(positions), 1))), axis=1)
+    mask = distance_to_middle_position < 0.2
 
     box_of_particles = ParticleBox(number_of_particles=N,
                                    restitution_coefficient=xi,
@@ -144,18 +157,21 @@ def create_visualization_system(particle_parameters, simulation_parameters, run_
                                    radii=radii)
 
     simulation = Simulation(box_of_particles=box_of_particles, stopping_criterion=t_stop, tc=tc)
-    simulation.simulate_statistics_until_given_time(f'visualization_{run_number}', output_timestep=timestep,
+    simulation.mask = mask
+    simulation.simulate_statistics_until_given_time(f'visualization_pbc_xi_{xi}_{run_number}', output_timestep=timestep,
                                                     save_positions=True)
 
 
 def test_inelastic_collapse():
     N = 3
-    xi = 0.5
+    xi = 0.13
     v0 = 0.2
     rad = 0.05
     mass = np.ones(N)
     radii = np.ones(N)*rad
-    positions = np.array([[0.25, 0.5], [0.4, 0.5], [0.75, 0.5]])
+    # positions = np.array([[0.25, 0.5], [0.4, 0.5], [0.75, 0.5]])
+    # velocities = np.array([[v0, 0], [0, 0], [-v0, 0]])
+    positions = np.array([[0.25, 0.5], [0.36, 0.5], [0.75, 0.5]])
     velocities = np.array([[v0, 0], [0, 0], [-v0, 0]])
 
     box_of_particles = ParticleBox(number_of_particles=N,
@@ -165,9 +181,10 @@ def test_inelastic_collapse():
                                    masses=mass,
                                    radii=radii)
 
-    simulation = Simulation(box_of_particles=box_of_particles, stopping_criterion=10, tc=0)
-    simulation.simulate_statistics_until_given_time(f'inelastic_collapse', output_timestep=0.1,
-                                                    save_positions=True)
+    simulation = Simulation(box_of_particles=box_of_particles, stopping_criterion=20, tc=0)
+    simulation.simulate_until_given_number_of_collisions(f'inelastic_collapse', output_timestep=0.01,
+                                                         save_positions=True)
+    print(simulation.average_number_of_collisions)
 
 
 def speed_distribution(particle_parameters, simulation_parameters, run_number):
@@ -208,7 +225,7 @@ def energy_development(particle_parameters, simulation_parameters, run_number):
     t_stop, timestep, tc = simulation_parameters[0], simulation_parameters[1], simulation_parameters[2]
     positions = np.load(os.path.join(init_folder, f'uniform_pos_N_{N}_rad_{r}.npy'))
     radii = np.ones(N) * r  # all particles have the same radius
-    mass = np.ones(N)*4  # all particles get initially the same mass
+    mass = np.ones(N)*1  # all particles get initially the same mass
 
     # velocities = random_uniformly_distributed_velocities(N, v0)
     velocities = np.load(os.path.join(init_folder, f'eq_velocity_N_{N}_rad_{r}.npy'))
@@ -233,3 +250,35 @@ def energy_development(particle_parameters, simulation_parameters, run_number):
 
     np.save(file=os.path.join(results_folder, f'energy_development_N_{N}_xi_{xi}_tstop_{t_stop}_lgtc_{np.log10(tc)}_'
                                               f'{run_number}'), arr=energy_matrix)
+
+
+def mean_square_displacement(particle_parameters, simulation_parameters, run_number):
+    print(f'Run number: {run_number}')
+    N, xi, v0, r = int(particle_parameters[0]), particle_parameters[1], particle_parameters[2], particle_parameters[3]
+    t_stop, timestep, tc = simulation_parameters[0], simulation_parameters[1], simulation_parameters[2]
+    positions = np.load(os.path.join(init_folder, f'uniform_pos_N_{N}_rad_{r}.npy'))
+    radii = np.ones(N) * 0.002  # all particles have the same radius
+    mass = np.ones(N) * 1  # all particles get initially the same mass
+
+    velocities = random_uniformly_distributed_velocities(N, v0)
+    # velocities = np.load(os.path.join(init_folder, f'eq_velocity_N_{N}_rad_{r}.npy'))
+    # np.random.shuffle(velocities)
+
+    box_of_particles = ParticleBox(number_of_particles=N,
+                                   restitution_coefficient=xi,
+                                   initial_positions=positions,
+                                   initial_velocities=velocities,
+                                   masses=mass,
+                                   radii=radii)
+
+    simulation = Simulation(box_of_particles=box_of_particles, stopping_criterion=t_stop, tc=tc)
+    time_array, mean_q_dist_array, mean_q_speed_array = \
+        simulation.simulate_until_given_time_mask_quantities('msd', output_timestep=timestep, save_positions=False)
+
+    msd_matrix = np.zeros((len(time_array), 3))
+    msd_matrix[:, 0] = time_array
+    msd_matrix[:, 1] = mean_q_dist_array
+    msd_matrix[:, 2] = mean_q_speed_array
+    offset = 0
+    np.save(file=os.path.join(results_folder, f'msd_pbc_eq_start_N_{N}_xi_{xi}_tstop_{t_stop}_lgtc_{np.log10(tc)}_'
+                                              f'{run_number+offset}'), arr=msd_matrix)
