@@ -23,7 +23,8 @@ box_of_particles = ParticleBox(number_of_particles=N,
                                initial_positions=pos,
                                initial_velocities=vel,
                                masses=mass,
-                               radii=radii)
+                               radii=radii,
+                               pbc=True)
 
 simulation = Simulation(box_of_particles=box_of_particles, stopping_criterion=10)
 simulation.simulate_until_given_number_of_collisions('test_pbc', output_timestep=0.1, save_positions=True)
