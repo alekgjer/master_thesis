@@ -3,6 +3,7 @@ import os
 import numpy as np
 
 import utility_functions as util_funcs
+import sde_solver as sde
 
 from config import init_folder
 
@@ -14,13 +15,14 @@ problem = {0: 'Testing',
            1: 'Visualization',
            2: 'Speed distribution',
            3: 'Energy development',
-           4: 'Mean square displacement'
-           }[4]
+           4: 'Mean square displacement',
+           5: 'SDE solver',
+           }[5]
 print(f"Problem: {problem}")
 
 # set particle parameters
 N = 1000  # number of particles
-xi = 0.5  # restitution coefficient
+xi = 0.8  # restitution coefficient
 v0 = np.sqrt(2)  # initial speed. Only used if all particles start with the same speed.
 radius = 1/40  # radius of each particle
 
@@ -51,7 +53,7 @@ elif problem == 'Speed distribution':
                                                simulation_parameters=[average_number_of_collisions_stop, timestep, tc],
                                                simulation_function=util_funcs.speed_distribution,
                                                number_of_cores=4,
-                                               number_of_runs=20)
+                                               number_of_runs=12)
     else:
         util_funcs.speed_distribution(particle_parameters=[N, xi, v0, radius],
                                       simulation_parameters=[average_number_of_collisions_stop, timestep, tc],
@@ -74,5 +76,14 @@ elif problem == 'Mean square displacement':
                                            simulation_function=util_funcs.mean_square_displacement,
                                            number_of_cores=4,
                                            number_of_runs=4)
+elif problem == 'SDE solver':
+    dt = 0.05
+    t_stop = 1000
+    if xi == 1:
+        sde.solve_underdamped_langevin_equation(N, dt, t_stop)
+    elif xi == 0.8:
+        sde.solve_udsbm_langevin_equation(N, dt, t_stop)
+    else:
+        print('SDE is currently solved for xi=1 or xi=0.8. Change parameters for other xi!!')
 
 print(f"Time used: {time.time() - start_time}")

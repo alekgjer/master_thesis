@@ -131,7 +131,7 @@ def random_uniformly_distributed_velocities(number_of_particles, v0, dimensions)
     :param number_of_particles: number of particles.
     :param v0: initial speed of all particles.
     :param dimensions: int which tell the dimensions of the system. Can be 2 or 3.
-    :return: uniformly distributed velocities as a 2D array with shape (number_of_particles, 2).
+    :return: uniformly distributed velocities as a 2D or 3D array with shape (number_of_particles, 2 or 3).
     """
     velocities = np.zeros((number_of_particles, dimensions))
     if dimensions == 2:
@@ -263,8 +263,9 @@ def speed_distribution(particle_parameters, simulation_parameters, run_number):
         np.save(file=os.path.join(init_folder, f'eq_velocity_N_{N}_rad_{rad}_3d.npy'),
                 arr=simulation.box_of_particles.velocities)
     else:
+        offset = 20
         speed_matrix[:, 1] = simulation.box_of_particles.compute_speeds()
-        np.save(file=os.path.join(results_folder, f'eq_state_speed_distribution_N_{N}_{run_number}'),
+        np.save(file=os.path.join(results_folder, f'eq_state_speed_distribution_N_{N}_{run_number+offset}'),
                 arr=speed_matrix)
 
 
