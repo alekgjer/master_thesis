@@ -5,6 +5,8 @@ import heapq
 import os
 import shutil
 
+from scipy.linalg import norm
+
 from config import plots_folder
 
 plt.style.use('bmh')  # for nicer plots
@@ -87,7 +89,7 @@ class Simulation:
             coll = matplotlib.collections.EllipseCollection(self.box_of_particles.radii * 2,
                                                             self.box_of_particles.radii * 2,
                                                             np.zeros_like(self.box_of_particles.radii),
-                                                            offsets=self.box_of_particles.positions, units='width',
+                                                            offsets=self.box_of_particles.positions[:, :2], units='width',
                                                             transOffset=ax.transData)
             ax.add_collection(coll)
 
@@ -95,13 +97,13 @@ class Simulation:
             coll_1 = matplotlib.collections.EllipseCollection(self.box_of_particles.radii[~self.mask] * 2,
                                                               self.box_of_particles.radii[~self.mask] * 2,
                                                               np.zeros_like(self.box_of_particles.radii[~self.mask]),
-                                                              offsets=self.box_of_particles.positions[~self.mask, :],
+                                                              offsets=self.box_of_particles.positions[~self.mask, :2],
                                                               units='width',
                                                               transOffset=ax.transData)
             coll_2 = matplotlib.collections.EllipseCollection(self.box_of_particles.radii[self.mask] * 2,
                                                               self.box_of_particles.radii[self.mask] * 2,
                                                               np.zeros_like(self.box_of_particles.radii[self.mask]),
-                                                              offsets=self.box_of_particles.positions[self.mask, :],
+                                                              offsets=self.box_of_particles.positions[self.mask, :2],
                                                               units='width',
                                                               transOffset=ax.transData, facecolors='red')
             ax.add_collection(coll_1)
@@ -412,3 +414,82 @@ class Simulation:
         print('Simulation done!')
         print('---------------------')
         return time_array, mean_square_displacement_array, mean_square_speed_array
+
+    def simulate_mean_free_path(self, simulation_label, output_timestep=1.0, save_positions=True):
+        """
+            Implementation of the event driven simulation to do simulations of the mfp
+        :param simulation_label: string containing information about the simulation to identify simulation.
+        :param output_timestep: parameter used to determine how often do to an output in the simulation.
+        :param save_positions: boolean variable used to indicate if one want to save positions. Since saving takes some
+        capacity and it is not so interesting when doing multiple runs one have the option to not save positions.
+        """
+        print('Simulate until a given simulation time is reached')
+        print(f'N: {self.box_of_particles.N} and xi: {self.box_of_particles.restitution_coefficient}..')
+        print('---------------------')
+        # create folder in order to save particle positions as a png files throughout the simulation
+        simulation_folder = ""
+        if save_positions:
+            simulation_folder = self.create_simulation_folder(simulation_label, output_timestep)
+
+        print('Creating initial queue..')
+
+        next_output_time = 0  # value that keeps track of when the next output will occur
+        output_number = 0  # value to keep the order of pictures saved at each output
+        # Initialize the queue with all starting collisions
+        self.box_of_particles.create_initial_priority_queue(t_max=self.stopping_criterion)
+
+        # initial energy for all particles
+        self.average_energy = self.box_of_particles.compute_energy()
+
+        # give initial output and save particle positions
+        self.print_output()
+        if save_positions:
+            self.save_particle_positions(simulation_folder, output_number)
+        next_output_time += output_timestep
+        output_number += 1
+
+        distance_between_collisions = np.zeros(self.box_of_particles.N)
+        number_of_particle_particle_collisions = np.zeros_like(distance_between_collisions)
+
+        print('Event driven simulation in progress..')
+        # run until the simulation time has reached the stopping criterion
+        while self.simulation_time < self.stopping_criterion:
+            collision_tuple = heapq.heappop(self.box_of_particles.collision_queue)  # pop the earliest collision/event
+            time_at_collision = collision_tuple[0]  # extract time at collision
+            # do output while waiting for time_at_collision if next output is earlier
+            while next_output_time < time_at_collision:
+                # update positions and simulation_time by incrementing time until next output
+                dt = next_output_time - self.simulation_time
+                self.box_of_particles.positions += self.box_of_particles.velocities * dt
+                self.simulation_time += dt
+
+                # update average energy for all particles
+                self.average_energy = self.box_of_particles.compute_energy()
+                # give output and save particle positions
+                self.print_output()
+                print(f'mfp: {np.mean(distance_between_collisions / number_of_particle_particle_collisions)}')
+                if save_positions:
+                    self.save_particle_positions(simulation_folder, output_number)
+
+                next_output_time += output_timestep
+                output_number += 1
+            # if valid collision -> do it! If not discard it and try the next earliest etc.
+            if self.box_of_particles.valid_collision(collision_tuple):
+                object_one = collision_tuple[1][0]
+                object_two = collision_tuple[1][1]
+                if object_two not in ['hw', 'vw', 'tbw']:  # make sure it is a particle particle collision
+                    # get speed. Update distance as speed times time difference. Add collision
+                    speed_one = norm(self.box_of_particles.velocities[object_one, :])
+                    distance_between_collisions[object_one] += speed_one * (
+                                time_at_collision - self.time_at_previous_collision[object_one])
+                    speed_two = norm(self.box_of_particles.velocities[object_two, :])
+                    distance_between_collisions[object_two] += speed_two * (
+                            time_at_collision - self.time_at_previous_collision[object_two])
+                    number_of_particle_particle_collisions[object_one] += 1
+                    number_of_particle_particle_collisions[object_two] += 1
+                self.perform_collision(time_at_collision, collision_tuple, t_max=self.stopping_criterion)
+
+        print('Simulation done!')
+        print('---------------------')
+        # mfp as the mean (tot_distance/number_of_collisions)
+        print(f'mfp: {np.mean(distance_between_collisions/number_of_particle_particle_collisions)}')

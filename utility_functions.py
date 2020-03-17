@@ -36,7 +36,7 @@ def random_positions_for_given_radius(number_of_particles, radius, dimensions):
             break
         random_position = np.zeros(3)
         if dimensions == 2:
-            random_position = np.array([x_pos[i], y_pos[i], 0])  # pick a random position in 2D
+            random_position = np.array([x_pos[i], y_pos[i]])  # pick a random position in 2D
         elif dimensions == 3:
             random_position = np.array([x_pos[i], y_pos[i], z_pos[i]])  # pick a random position in 3D
         else:
@@ -59,7 +59,7 @@ def random_positions_for_given_radius(number_of_particles, radius, dimensions):
     positions = positions[positions[:, 0] != 0]
     number_of_positions = len(positions)  # number of accepted points -> number of accepted particles
     if dimensions == 2:
-        np.save(file=os.path.join(init_folder, f'uniform_pos_N_{number_of_positions}_rad_{radius}'), arr=positions)
+        np.save(file=os.path.join(init_folder, f'uniform_pos_N_{number_of_positions}_rad_{radius}_2d'), arr=positions)
     else:
         np.save(file=os.path.join(init_folder, f'uniform_pos_N_{number_of_positions}_rad_{radius}_3d'), arr=positions)
 
@@ -168,19 +168,22 @@ def run_simulations_in_parallel(particle_parameters, simulation_parameters, simu
 
 
 def create_visualization_system(particle_parameters, simulation_parameters, run_number):
-    # TODO: atm used in 2D simulations. Needs to be updated when visualization in 3D has been implemented.
+    # Atm only does 2d visualizations
     N, xi, v0, r = int(particle_parameters[0]), particle_parameters[1], particle_parameters[2], particle_parameters[3]
     t_stop, timestep, tc = simulation_parameters[0], simulation_parameters[1], simulation_parameters[2]
-    positions = np.load(os.path.join(init_folder, f'uniform_pos_N_{N}_rad_{r}.npy'))
-    radii = np.ones(N) * 0.004  # all particles have the same radius
+    positions = np.zeros((N, 3))
+    positions[:, :2] = np.load(os.path.join(init_folder, f'uniform_pos_N_{N}_rad_{r}_2d.npy'))
+    positions[:, 2] = 0.5
+    print('Validation before..')
+    validate_positions(positions, r)
+    radii = np.ones(N) * r  # all particles have the same radius
     mass = np.ones(N)  # all particles get initially the same mass
 
-    velocities = random_uniformly_distributed_velocities(N, v0, 2)
-    # velocities = np.load(os.path.join(init_folder, f'eq_velocity_N_{N}_rad_{r}.npy'))
-    # np.random.shuffle(velocities)
+    velocities = np.zeros((N, 3))
+    velocities[:, :2] = random_uniformly_distributed_velocities(N, v0, 2)
 
     # pick all particles inside a circle from center with radius 0.2 by turning mask into boolean array
-    distance_to_middle_position = norm((positions - np.tile([0.5, 0.5], reps=(len(positions), 1))), axis=1)
+    distance_to_middle_position = norm((positions - np.tile([0.5, 0.5, 0.5], reps=(len(positions), 1))), axis=1)
     mask = distance_to_middle_position < 0.2
 
     box_of_particles = ParticleBox(number_of_particles=N,
@@ -195,6 +198,8 @@ def create_visualization_system(particle_parameters, simulation_parameters, run_
     simulation.mask = mask
     simulation.simulate_statistics_until_given_time(f'visualization_pbc_xi_{xi}_{run_number}', output_timestep=timestep,
                                                     save_positions=True)
+    print('Validation after..')
+    validate_positions(simulation.box_of_particles.positions, r)
 
 
 def test_inelastic_collapse():
@@ -229,23 +234,40 @@ def speed_distribution(particle_parameters, simulation_parameters, run_number):
         Function to do an event driven simulation until a given number of collisions and then save
         the speed of all particles in order to later verity that the speeds are given by the Maxwell-
         Boltzmann distribution. It can also save the velocities in order to create equilibrium state which
-        later can be used as initial values.
+        later can be used as initial values. Can be used to conduct simulations in either 2 or 3
+        dimensions by specifying dimensions. 2D use 3d framwork by using zi=z=0.5 and v_zi = 0 for all i.
     :param particle_parameters: array of [N, xi, v0, radius] used to initialize a ParticleBox.
-    :param simulation_parameters: array of [avg_coll_stop, output_timestep, tc] used to initialize a Simulation.
+    :param simulation_parameters: array of [avg_coll_stop, output_timestep, dimensions] used to initialize a Simulation.
     :param run_number: int used such that one can run parallel simulations and write results to different files.
     """
     print(f"Run number: {run_number}")
     N, xi, v0, rad = int(particle_parameters[0]), particle_parameters[1], particle_parameters[2], particle_parameters[3]
-    avg_collisions_stop, timestep, tc = simulation_parameters[0], simulation_parameters[1], simulation_parameters[2]
+    avg_collisions_stop, timestep, dimensions = simulation_parameters[0], simulation_parameters[1], int(simulation_parameters[2])
 
-    positions = np.load(os.path.join(init_folder, f'uniform_pos_N_{N}_rad_{rad}_3d.npy'))
+    positions = np.zeros((N, 3))
+    if dimensions == 2:
+        positions[:, :2] = np.load(os.path.join(init_folder, f'uniform_pos_N_{N}_rad_{rad}_2d.npy'))
+        positions[:, 2] = 0.5
+    elif dimensions == 3:
+        positions = np.load(os.path.join(init_folder, f'uniform_pos_N_{N}_rad_{rad}_3d.npy'))
+    else:
+        print('Dimensions need to be 2 or 3!')
+        exit()
+
     radii = np.ones(N) * rad  # all particles have the same radius
     mass = np.ones(N)  # all particles get initially the same mass
 
     speed_matrix = np.zeros((N, 2))  # array with mass and speed to save to file
     speed_matrix[:, 0] = mass
 
-    velocities = random_uniformly_distributed_velocities(N, v0, 3)
+    velocities = np.zeros((N, 3))
+    if dimensions == 2:
+        velocities[:, :2] = random_uniformly_distributed_velocities(N, v0, dimensions)
+    elif dimensions == 3:
+        velocities = random_uniformly_distributed_velocities(N, v0, dimensions)
+    else:
+        print('Dimensions need to be 2 or 3!')
+        exit()
 
     box_of_particles = ParticleBox(number_of_particles=N,
                                    restitution_coefficient=xi,
@@ -253,19 +275,19 @@ def speed_distribution(particle_parameters, simulation_parameters, run_number):
                                    initial_velocities=velocities,
                                    masses=mass,
                                    radii=radii,
-                                   pbc=True)
+                                   pbc=False)
 
     simulation = Simulation(box_of_particles=box_of_particles, stopping_criterion=avg_collisions_stop)
     simulation.simulate_until_given_number_of_collisions('speed_distribution',
                                                          output_timestep=timestep,
                                                          save_positions=False)
     if run_number == -1:
-        np.save(file=os.path.join(init_folder, f'eq_velocity_N_{N}_rad_{rad}_3d.npy'),
+        np.save(file=os.path.join(init_folder, f'eq_velocity_N_{N}_rad_{rad}_{dimensions}d.npy'),
                 arr=simulation.box_of_particles.velocities)
     else:
-        offset = 20
+        offset = 0
         speed_matrix[:, 1] = simulation.box_of_particles.compute_speeds()
-        np.save(file=os.path.join(results_folder, f'eq_state_speed_distribution_N_{N}_{run_number+offset}'),
+        np.save(file=os.path.join(results_folder, f'eq_state_speed_distribution_{dimensions}d_N_{N}_{run_number+offset}'),
                 arr=speed_matrix)
 
 
@@ -362,3 +384,37 @@ def mean_square_displacement(particle_parameters, simulation_parameters, run_num
         np.save(file=os.path.join(results_folder,
                                   f'msd_3d_pbc_eq_start_N_{N}_r_{r}_xi_{xi}_tstop_{t_stop}_lgtc_{np.log10(tc)}_'
                                   f'{run_number + offset}'), arr=msd_matrix)
+
+
+def mean_free_path(particle_parameters, simulation_parameters, run_number):
+    """
+        Function to do an event driven simulation until a given time to compute the mfp.
+    :param particle_parameters: array of [N, xi, v0, radius] used to initialize a ParticleBox.
+    :param simulation_parameters: array of [t_stop, output_timestep, tc] used to initialize a Simulation.
+    :param run_number: int used such that one can run parallel simulations and save results to different files.
+    """
+    print(f"Run number: {run_number}")
+    N, xi, v0, r = int(particle_parameters[0]), particle_parameters[1], particle_parameters[2], particle_parameters[3]
+    t_stop, timestep, tc = simulation_parameters[0], simulation_parameters[1], simulation_parameters[2]
+    positions = np.load(os.path.join(init_folder, f'uniform_pos_N_{N}_rad_{r}_3d.npy'))
+    radii = np.ones(N) * r  # all particles have the same radius
+    mass = np.ones(N)  # all particles get initially the same mass
+
+    # velocities = random_uniformly_distributed_velocities_3d(N, v0, 3)  # all particles start with same speed
+    velocities = np.load(os.path.join(init_folder, f'eq_velocity_N_{N}_rad_{r}_3d.npy'))  # eq state
+    np.random.shuffle(velocities)  # shuffle to create different systems for each run
+    # Nice little trick to shift reference frame. Needed for correct msd due to computing the difference
+    # between current positions and the initial positions with pbc. The system in whole moves without correction!
+    velocities -= np.mean(velocities, axis=0)  # little correction, but has a huge impact on msd!!
+
+    box_of_particles = ParticleBox(number_of_particles=N,
+                                   restitution_coefficient=xi,
+                                   initial_positions=positions,
+                                   initial_velocities=velocities,
+                                   masses=mass,
+                                   radii=radii,
+                                   pbc=True)
+
+    simulation = Simulation(box_of_particles=box_of_particles, stopping_criterion=t_stop, tc=tc)
+
+    simulation.simulate_mean_free_path('mfp', output_timestep=timestep, save_positions=False)
