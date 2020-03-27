@@ -263,13 +263,14 @@ class Simulation:
     def simulate_statistics_until_given_time(self, simulation_label, output_timestep=1.0, save_positions=True):
         """
             Implementation of the event driven simulation where the stopping criterion is given as a limit of
-            how much one want the simulation time to be. Is useful wfor looking at a property as a function of time.
-            Atm computes mean energy and mean speed of all particles (simulation statistics) at all output times.
+            how much one want the simulation time to be. It is useful for looking at a property as a function of time.
+            Atm computes mean energy of all particles, priority queue elements and the average number of collisions
+             at all output times. This is the information given in a output of the simulation.
         :param simulation_label: string containing information about the simulation to identify simulation.
         :param output_timestep: parameter used to determine how often do to an output in the simulation.
         :param save_positions: boolean variable used to indicate if one want to save positions. Since saving takes some
         capacity and it is not so interesting when doing multiple runs one have the option to not save positions.
-        :return time_array, energy_array, mean_speed_array.
+        :return time_array, energy_array, length_priority_queue_array, average_number_of_collisions_array
         """
         print('Simulate until a given simulation time')
         print(f'N: {self.box_of_particles.N} and xi: {self.box_of_particles.restitution_coefficient}..')
@@ -298,10 +299,11 @@ class Simulation:
 
         time_array = np.zeros(int(self.stopping_criterion/output_timestep)+1)  # array for time at all output times
         energy_array = np.zeros_like(time_array)  # array for average energy of at particles at all output times
-        mean_speed_array = np.zeros_like(time_array)  # array for average speed at all output times
+        length_priority_queue_array = np.zeros_like(time_array)  # array for elements in the queue at all output times
+        average_number_of_collisions_array = np.zeros_like(time_array)  # array for average number of collisions
 
         energy_array[0] = self.average_energy
-        mean_speed_array[0] = np.mean(self.box_of_particles.compute_speeds())
+        length_priority_queue_array[0] = len(self.box_of_particles.collision_queue)
 
         print('Event driven simulation in progress..')
         # run until the simulation time has reached the stopping criterion
@@ -321,7 +323,8 @@ class Simulation:
                 self.average_energy = self.box_of_particles.compute_energy()
 
                 energy_array[output_number] = self.average_energy
-                mean_speed_array[output_number] = np.mean(self.box_of_particles.compute_speeds())
+                length_priority_queue_array[output_number] = len(self.box_of_particles.collision_queue)
+                average_number_of_collisions_array[output_number] = self.average_number_of_collisions
 
                 # give output and save particle positions
                 self.print_output()
@@ -336,7 +339,7 @@ class Simulation:
 
         print('Simulation done!')
         print('---------------------')
-        return time_array, energy_array, mean_speed_array
+        return time_array, energy_array, length_priority_queue_array, average_number_of_collisions_array
 
     def simulate_msd_until_given_time(self, simulation_label, output_timestep=1.0, save_positions=True):
         """
@@ -493,3 +496,175 @@ class Simulation:
         print('---------------------')
         # mfp as the mean (tot_distance/number_of_collisions)
         print(f'mfp: {np.mean(distance_between_collisions/number_of_particle_particle_collisions)}')
+
+    def perform_outbreak_collision(self, time_at_collision, collision_tuple, t_max=None):
+        """
+            FUnction that from a collision tuple, performs the collision. Performing a collision consist of updating
+            the velocity of the involved particle(s) and update the parameters like collision count, average number of
+            collisions, time at prev collision. Will also update the collision queue by adding new possible collisions
+            for the involved particle(s). Is used for simulation of disease outbreak, where the use of high mass is
+            applied to serve as good citizens who do not go outside.
+        :param time_at_collision: time indicating the moment when the collision will occur.
+        :param collision_tuple: tuple with information: (coll_time, coll entities, coll_count_comp_coll, box_comp_coll).
+        :param t_max: the stopping criterion of the simulation is given by time. Used to not add collisions occurring
+        after the stopping criterion if one have used a stopping criterion based on time.
+        """
+        dt = time_at_collision - self.simulation_time  # the increment in time until the collision
+        # update positions and simulation_time by incrementing time until the collision
+        self.box_of_particles.positions += self.box_of_particles.velocities * dt
+        self.simulation_time += dt
+
+        object_one = collision_tuple[1][0]  # particle number of particle one
+        object_two = collision_tuple[1][1]  # particle number of particle two, or 'hw'/'vw'/'tbw' to indicate wall
+
+        # update velocities by letting a collision happen
+        if object_two == 'hw':
+            # update velocity of particle colliding with hw
+            self.box_of_particles.collision_horizontal_wall(object_one, 1)
+
+        elif object_two == 'vw':
+            # update velocity of particle in colliding with vw
+            self.box_of_particles.collision_vertical_wall(object_one, 1)
+
+        elif object_two == 'tbw':
+            print('This wall should get hit in 3D..')
+            exit()
+        else:
+            # update velocity of the two particles in the collision by particle indices, xi and box particle two
+            self.box_of_particles.collision_particles(object_one, object_two,
+                                                      self.box_of_particles.restitution_coefficient,
+                                                      collision_tuple[3][1])
+
+            if self.box_of_particles.masses[object_one] > 1e+05:
+                self.box_of_particles.velocities[object_one, :] = 0
+            if self.box_of_particles.masses[object_two] > 1e+05:
+                self.box_of_particles.velocities[object_two, :] = 0
+
+        self.box_of_particles.collision_count_particles[object_one] += 1  # update collision count
+
+        if object_two not in ['hw', 'vw', 'tbw']:  # if there is a second particle involved
+            self.box_of_particles.collision_count_particles[object_two] += 1  # update collision count
+            # get new collisions for object two
+            self.box_of_particles.update_queue_new_collisions_particle(object_two, self.simulation_time, t_max)
+            self.time_at_previous_collision[object_two] = time_at_collision  # add time at collision
+        # get new collisions for object one
+        self.box_of_particles.update_queue_new_collisions_particle(object_one, self.simulation_time, t_max)
+        self.time_at_previous_collision[object_one] = time_at_collision  # add time at collision
+        # update average number of collisions/events since one or two particles have been in a collision
+        self.average_number_of_collisions = np.mean(self.box_of_particles.collision_count_particles)
+
+        # if the collision_queue has too many entries, it is reset and initialized as in the start of the simulations
+        if len(self.box_of_particles.collision_queue) > self.max_length_collisions_queue:
+            self.box_of_particles.collision_queue = []
+            self.box_of_particles.create_initial_priority_queue(t_max)
+
+    def simulate_disease_outbreak(self, simulation_label, output_timestep=1.0, save_positions=True):
+        """
+            Implementation of the event driven simulation to do simulations of a disease outbreak
+        :param simulation_label: string containing information about the simulation to identify simulation.
+        :param output_timestep: parameter used to determine how often do to an output in the simulation.
+        :param save_positions: boolean variable used to indicate if one want to save positions. Since saving takes some
+        capacity and it is not so interesting when doing multiple runs one have the option to not save positions.
+        return: infected_particles, time_of_infection, infection_count arrays containing information about each
+        particle. First is 0/1 for healthy/sick, time of infection in simulation of how many did the particle infect.
+        """
+        print('Simulate until a given simulation time is reached')
+        print(f'N: {self.box_of_particles.N} and xi: {self.box_of_particles.restitution_coefficient}..')
+        print('---------------------')
+        # create folder in order to save particle positions as a png files throughout the simulation
+        simulation_folder = ""
+        if save_positions:
+            simulation_folder = self.create_simulation_folder(simulation_label, output_timestep)
+
+        infected_particles = np.zeros(self.box_of_particles.N)  # array used to tell if 0: healthy or 1: sick
+        recovered_particles = np.zeros_like(infected_particles)  # array used to tell if 0: acceptable or 1: recovered
+        time_of_infection = np.ones_like(infected_particles) * np.inf  # array used to save the time of infection
+        infection_count = np.zeros_like(infected_particles)  # number of how many other particles the particles infected
+        infected_particles[-1] = 1  # the last particle starts out infected. Due to [:home_perfect*N] are at home
+        time_of_infection[-1] = 0
+        self.mask = infected_particles == 1  # mask used to get other color (red) for the sick particles
+
+        print('Creating initial queue..')
+
+        next_output_time = 0  # value that keeps track of when the next output will occur
+        output_number = 0  # value to keep the order of pictures saved at each output
+        # Initialize the queue with all starting collisions
+        self.box_of_particles.create_initial_priority_queue(t_max=self.stopping_criterion)
+
+        # initial energy for all particles
+        self.average_energy = self.box_of_particles.compute_energy()
+
+        # give initial output and save particle positions
+        self.print_output()
+        if save_positions:
+            self.save_particle_positions(simulation_folder, output_number)
+        next_output_time += output_timestep
+        output_number += 1
+
+        disease_period = 0.2
+
+        time_array = np.arange(int(self.stopping_criterion/output_timestep)+1)*output_timestep
+        infected_rate = np.zeros_like(time_array)
+        recovered_rate = np.ones_like(time_array)
+        infected_rate[0] = np.mean(infected_particles)
+        recovered_rate[0] = 0
+
+        print('Event driven simulation in progress..')
+        # run until the simulation time has reached the stopping criterion
+        while self.simulation_time < self.stopping_criterion:
+            collision_tuple = heapq.heappop(
+                self.box_of_particles.collision_queue)  # pop the earliest collision/event
+            time_at_collision = collision_tuple[0]  # extract time at collision
+            # do output while waiting for time_at_collision if next output is earlier
+            while next_output_time < time_at_collision:
+                # update positions and simulation_time by incrementing time until next output
+                dt = next_output_time - self.simulation_time
+                self.box_of_particles.positions += self.box_of_particles.velocities * dt
+                self.simulation_time += dt
+
+                infected_rate[output_number] = np.mean(infected_particles)
+                recovered_rate[output_number] = np.mean(recovered_particles)
+
+                # update average energy for all particles
+                self.average_energy = self.box_of_particles.compute_energy()
+                # give output and save particle positions
+                self.print_output()
+                self.mask = infected_particles == 1  # update mask of infected particles
+                if save_positions:
+                    self.save_particle_positions(simulation_folder, output_number)
+
+                next_output_time += output_timestep
+                output_number += 1
+            # if valid collision -> do it! If not discard it and try the next earliest etc.
+            if self.box_of_particles.valid_collision(collision_tuple):
+                object_one = collision_tuple[1][0]
+                object_two = collision_tuple[1][1]
+                if self.simulation_time > (disease_period + time_of_infection[object_one]) and recovered_particles[
+                   object_one] == 0:
+                    recovered_particles[object_one] = 1
+                    infected_particles[object_one] = 0
+                if object_two not in ['vw', 'hw', 'tbw']:
+                    if self.simulation_time > (disease_period + time_of_infection[object_two]) and recovered_particles[
+                       object_two] == 0:
+                        recovered_particles[object_two] = 1
+                        infected_particles[object_two] = 0
+                    if infected_particles[object_one] == 1 and recovered_particles[object_two] == 0:
+                        if infected_particles[object_two] == 0:
+                            infected_particles[object_two] = 1
+                            time_of_infection[object_two] = time_at_collision
+                            infection_count[object_one] += 1
+                    elif infected_particles[object_two] == 1 and recovered_particles[object_one] == 0:
+                        if infected_particles[object_one] == 0:
+                            infected_particles[object_one] = 1
+                            time_of_infection[object_one] = time_at_collision
+                            infection_count[object_two] += 1
+
+                self.perform_outbreak_collision(time_at_collision, collision_tuple, t_max=self.stopping_criterion)
+                if np.sum(recovered_particles) == self.box_of_particles.N:
+                    # early stop when have been infected and then recovered
+                    print('Everybody got infected :(..')
+                    return time_array, infected_rate, recovered_rate
+
+        print('Simulation done!')
+        print('---------------------')
+        return time_array, infected_rate, recovered_rate

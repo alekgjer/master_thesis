@@ -168,7 +168,12 @@ def run_simulations_in_parallel(particle_parameters, simulation_parameters, simu
 
 
 def create_visualization_system(particle_parameters, simulation_parameters, run_number):
-    # Atm only does 2d visualizations
+    """
+        Function used to conduct 2D simulations and thus visualize a system of particles.
+    :param particle_parameters: array of [N, xi, v0, radius] used to initialize a ParticleBox.
+    :param simulation_parameters: array of [t_stop, output_timestep, tc] used to initialize a Simulation.
+    :param run_number: int used such that one can run parallel simulations save different visualizations.
+    """
     N, xi, v0, r = int(particle_parameters[0]), particle_parameters[1], particle_parameters[2], particle_parameters[3]
     t_stop, timestep, tc = simulation_parameters[0], simulation_parameters[1], simulation_parameters[2]
     positions = np.zeros((N, 3))
@@ -181,6 +186,7 @@ def create_visualization_system(particle_parameters, simulation_parameters, run_
 
     velocities = np.zeros((N, 3))
     velocities[:, :2] = random_uniformly_distributed_velocities(N, v0, 2)
+    velocities -= np.mean(velocities, axis=0)
 
     # pick all particles inside a circle from center with radius 0.2 by turning mask into boolean array
     distance_to_middle_position = norm((positions - np.tile([0.5, 0.5, 0.5], reps=(len(positions), 1))), axis=1)
@@ -196,10 +202,60 @@ def create_visualization_system(particle_parameters, simulation_parameters, run_
 
     simulation = Simulation(box_of_particles=box_of_particles, stopping_criterion=t_stop, tc=tc)
     simulation.mask = mask
-    simulation.simulate_statistics_until_given_time(f'visualization_pbc_xi_{xi}_{run_number}', output_timestep=timestep,
+    simulation.simulate_statistics_until_given_time(f'visualization_pbc_{run_number}', output_timestep=timestep,
                                                     save_positions=True)
     print('Validation after..')
     validate_positions(simulation.box_of_particles.positions, r)
+
+
+def simulate_disease_outbreak(particle_parameters, simulation_parameters):
+    """
+        Function used to conduct 2D simulations of a disease outbreak.
+    :param particle_parameters: array of [N, xi, v0, radius] used to initialize a ParticleBox.
+    :param simulation_parameters: array of [t_stop, output_timestep, tc] used to initialize a Simulation.
+    """
+    N, xi, v0, r = int(particle_parameters[0]), particle_parameters[1], particle_parameters[2], particle_parameters[3]
+    t_stop, timestep, tc = simulation_parameters[0], simulation_parameters[1], simulation_parameters[2]
+    positions = np.zeros((N, 3))
+    positions[:, :2] = np.load(os.path.join(init_folder, f'uniform_pos_N_{N}_rad_{r}_2d.npy'))
+    positions[:, 2] = 0.5
+
+    print('Validation of positions..')
+    validate_positions(positions, r)
+
+    radii = np.ones(N) * r  # all particles have the same radius
+    mass = np.ones(N)  # all particles get initially the same mass
+
+    home_percents = [0, 0.25, 0.5, 0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]
+
+    for i, home_percent in enumerate(home_percents):
+        np.random.shuffle(positions)  # shuffle to get a particle starting out with the infection every time
+        mass[:int(home_percent*N)] = 1e+06  # use large mass to easy identify particle who stay at home with v=0
+
+        velocities = np.zeros((N, 3))
+        velocities[:, :2] = random_uniformly_distributed_velocities(N, v0, 2)
+        velocities[:int(home_percent*N), :] = 0
+
+        box_of_particles = ParticleBox(number_of_particles=N,
+                                       restitution_coefficient=xi,
+                                       initial_positions=positions,
+                                       initial_velocities=velocities,
+                                       masses=mass,
+                                       radii=radii,
+                                       pbc=False)
+
+        simulation = Simulation(box_of_particles=box_of_particles, stopping_criterion=t_stop, tc=tc)
+        time_array, infected_rate, recovered_rate = \
+            simulation.simulate_disease_outbreak(f'disease_outbreak_hp_{home_percent}',
+                                                 output_timestep=timestep, save_positions=False)
+
+        disease_matrix = np.zeros((len(time_array), 3))
+        disease_matrix[:, 0] = time_array
+        disease_matrix[:, 1] = infected_rate
+        disease_matrix[:, 2] = recovered_rate
+
+        np.save(file=os.path.join(results_folder, f'disease_matrix_N_{N}_rad_{r}_hp_{home_percent}'),
+                arr=disease_matrix)
 
 
 def test_inelastic_collapse():
@@ -291,10 +347,10 @@ def speed_distribution(particle_parameters, simulation_parameters, run_number):
                 arr=speed_matrix)
 
 
-def energy_development(particle_parameters, simulation_parameters, run_number):
+def get_simulation_statistics(particle_parameters, simulation_parameters, run_number):
     """
-        Function to do an event driven simulation until a given time and save to file the average particle
-        energy decay as a function of time.
+        Function to do an event driven simulation until a given time and save to file the simulation statistics,
+        which is all parameters given in a simulation output at each timestep.
     :param particle_parameters: array of [N, xi, v0, radius] used to initialize a ParticleBox.
     :param simulation_parameters: array of [t_stop, output_timestep, tc] used to initialize a Simulation.
     :param run_number: int used such that one can run parallel simulations and save results to different files.
@@ -309,6 +365,7 @@ def energy_development(particle_parameters, simulation_parameters, run_number):
     # velocities = random_uniformly_distributed_velocities(N, v0, 3)
     velocities = np.load(os.path.join(init_folder, f'eq_velocity_N_{N}_rad_{r}_3d.npy'))  # eq state
     np.random.shuffle(velocities)  # shuffle to create different systems for each run
+    velocities -= np.mean(velocities, axis=0)
 
     box_of_particles = ParticleBox(number_of_particles=N,
                                    restitution_coefficient=xi,
@@ -319,22 +376,23 @@ def energy_development(particle_parameters, simulation_parameters, run_number):
                                    pbc=True)
 
     simulation = Simulation(box_of_particles=box_of_particles, stopping_criterion=t_stop, tc=tc)
-    time_array, energy_array, speed_array = simulation.simulate_statistics_until_given_time('energy_development',
-                                                                                            output_timestep=timestep,
-                                                                                            save_positions=False)
+    time_array, energy_array, length_collision_queue_array, average_number_of_collisions_array = \
+        simulation.simulate_statistics_until_given_time('sim_statistics', output_timestep=timestep,
+                                                        save_positions=False)
 
-    energy_matrix = np.zeros((len(time_array), 3))
-    energy_matrix[:, 0] = time_array
-    energy_matrix[:, 1] = energy_array
-    energy_matrix[:, 2] = speed_array
+    statistics_matrix = np.zeros((len(time_array), 4))
+    statistics_matrix[:, 0] = time_array
+    statistics_matrix[:, 1] = energy_array
+    statistics_matrix[:, 2] = length_collision_queue_array
+    statistics_matrix[:, 3] = average_number_of_collisions_array
     # save results to file
     if tc == 0:  # to avoid np.log10(0) error
-        np.save(file=os.path.join(results_folder, f'energy_development_N_{N}_xi_{xi}_tstop_{t_stop}_lgtc_-inf_'
-                                                  f'{run_number}'), arr=energy_matrix)
+        np.save(file=os.path.join(results_folder, f'simulation_statistics_pbc_N_{N}_xi_{xi}_tstop_{t_stop}_lgtc_-inf_'
+                                                  f'{run_number}'), arr=statistics_matrix)
 
     else:
-        np.save(file=os.path.join(results_folder, f'energy_matrix_N_{N}_xi_{xi}_tstop_{t_stop}_lgtc_{np.log10(tc)}_'
-                                                  f'{run_number}'), arr=energy_matrix)
+        np.save(file=os.path.join(results_folder, f'simulation_statistics_pbc_N_{N}_xi_{xi}_tstop_{t_stop}_lgtc_'
+                                                  f'{np.log10(tc)}_{run_number}'), arr=statistics_matrix)
 
 
 def mean_square_displacement(particle_parameters, simulation_parameters, run_number):
@@ -375,7 +433,7 @@ def mean_square_displacement(particle_parameters, simulation_parameters, run_num
     msd_matrix[:, 0] = time_array
     msd_matrix[:, 1] = msd_array
     msd_matrix[:, 2] = mss_array
-    offset = 4  # for later runs where one want more runs without deleting the earlier runs
+    offset = 0  # for later runs where one want more runs without deleting the earlier runs
     # save to file
     if tc == 0:
         np.save(file=os.path.join(results_folder, f'msd_3d_pbc_eq_start_N_{N}_r_{r}_xi_{xi}_tstop_{t_stop}_lgtc_-inf_'
