@@ -10,6 +10,7 @@ results/*
 
 # Ignore config.py
 config.py
+config_idun.py
 
 # Ignore pycache
 __pycache__/*

@@ -427,7 +427,7 @@ def mean_square_displacement(particle_parameters, simulation_parameters, run_num
 
     simulation = Simulation(box_of_particles=box_of_particles, stopping_criterion=t_stop, tc=tc)
     time_array, msd_array, mss_array = \
-        simulation.simulate_msd_until_given_time('msd', output_timestep=timestep, save_positions=False)
+        simulation.simulate_msd_until_given_time(output_timestep=timestep, give_output=False)
 
     msd_matrix = np.zeros((len(time_array), 3))
     msd_matrix[:, 0] = time_array

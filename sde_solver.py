@@ -17,9 +17,8 @@ from config import results_folder, init_folder
 class SDESolver:
     """
         Class used to solve different SDEs by applying some numerical discretization methods. Is mainly used to solve
-        the underdamped Langevin equation, underdamped scaled brownian motion and overdamped scaled brownian motion by
-        applying the Euler-Maruyama method. It does the Euler-Maruyama method for a given number of particles and return
-        ensemble averages of e.g MSD.
+        the underdamped Langevin equation and underdamped scaled brownian motion by applying the Euler-Maruyama method.
+         It does the Euler-Maruyama method for a given number of particles and return ensemble averages of the MSD.
     """
     def __init__(self, t_start, t_stop, dt, number_of_particles, constants):
         """

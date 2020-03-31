@@ -20,7 +20,7 @@ problem = {0: 'Testing',
            5: 'SDE solver',
            6: 'Mean free path',
            7: 'Disease outbreak',
-           }[5]
+           }[4]
 print(f"Problem: {problem}")
 
 # set particle parameters
@@ -28,6 +28,13 @@ N = 1000  # number of particles
 xi = 0.8  # restitution coefficient
 v0 = np.sqrt(2)  # initial speed. Only used if all particles start with the same speed.
 radius = 1/40  # radius of each particle
+
+run_local = False  # boolean used to tell if we are running a script local here or on a HPC
+if run_local:
+    number_of_cores_msd = 4
+else:
+    number_of_cores_msd = 10
+
 
 if problem == 'Testing':
     # util_funcs.check_speed_distribution(number_of_particles=N, rad=radius)
@@ -71,17 +78,17 @@ elif problem == 'Speed distribution':
                                       simulation_parameters=[average_number_of_collisions_stop, timestep, dim],
                                       run_number=-1)
 elif problem == 'Mean square displacement':
-    t_stop = 10000
-    timestep = 1
+    t_stop = 1000
+    timestep = 0.1
     tc = 0
     util_funcs.run_simulations_in_parallel(particle_parameters=[N, xi, v0, radius],
                                            simulation_parameters=[t_stop, timestep, tc],
                                            simulation_function=util_funcs.mean_square_displacement,
-                                           number_of_cores=4,
-                                           number_of_runs=4)
+                                           number_of_cores=number_of_cores_msd,
+                                           number_of_runs=number_of_cores_msd)
 elif problem == 'SDE solver':
     dt = 0.1
-    t_stop = 2000
+    t_stop = 1000
     if xi == 1:
         gamma0, d0, tau = 11.43, 0.058, np.inf
         sde_solver = SDESolver(t_start=0, t_stop=t_stop, dt=dt, number_of_particles=N, constants=[gamma0, d0, tau])

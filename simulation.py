@@ -77,7 +77,7 @@ class Simulation:
         return simulation_folder
 
     def save_particle_positions(self, simulation_folder, output_number):
-        # TODO: make correct for 3D simulations? If possible
+        # TODO: Consider making one for 3D simulations as well. 3D plots are not so illustrative in a report.
         """
             Function to save particle positions as a png image at a output time. NB: Only possible for 2D atm!
         :param simulation_folder: folder to save png images.
@@ -341,26 +341,22 @@ class Simulation:
         print('---------------------')
         return time_array, energy_array, length_priority_queue_array, average_number_of_collisions_array
 
-    def simulate_msd_until_given_time(self, simulation_label, output_timestep=1.0, save_positions=True):
+    def simulate_msd_until_given_time(self, output_timestep=1.0, give_output=True):
         """
             Implementation of the event driven simulation where the stopping criterion is given as a limit of
             how much one want the simulation time to be. Is useful when looking at a property as a function of time.
-            Atm computes mean square displacement and mean quadratic speed for all particles.
-        :param simulation_label: string containing information about the simulation to identify simulation.
+            Atm computes mean square displacement and mean quadratic speed for all particles. This function can also
+            be run on HPC.
         :param output_timestep: parameter used to determine how often do to an output in the simulation.
-        :param save_positions: boolean variable used to indicate if one want to save positions. Since saving takes some
-        capacity and it is not so interesting when doing multiple runs one have the option to not save positions.
+        :param give_output: boolean variable used to indicate if one want to do simulation output. It does take some
+        time, and since we want to use this code on HPC this option is used to reduce the output.
         :return time_array, mean_quadratic_distance_array, mean_quadratic_speed_array.
         """
-        print('Simulate until a given simulation time is reached')
-        print(f'N: {self.box_of_particles.N} and xi: {self.box_of_particles.restitution_coefficient}..')
-        print('---------------------')
-        # create folder in order to save particle positions as a png files throughout the simulation
-        simulation_folder = ""
-        if save_positions:
-            simulation_folder = self.create_simulation_folder(simulation_label, output_timestep)
-
-        print('Creating initial queue..')
+        if give_output:
+            print(f'Simulate until a given t_stop: {self.stopping_criterion} is reached')
+            print(f'N: {self.box_of_particles.N} and xi: {self.box_of_particles.restitution_coefficient}..')
+            print('---------------------')
+            print('Creating initial queue..')
 
         next_output_time = 0  # value that keeps track of when the next output will occur
         output_number = 0  # value to keep the order of pictures saved at each output
@@ -370,10 +366,10 @@ class Simulation:
         # initial energy for all particles
         self.average_energy = self.box_of_particles.compute_energy()
 
-        # give initial output and save particle positions
-        self.print_output()
-        if save_positions:
-            self.save_particle_positions(simulation_folder, output_number)
+        # give initial output
+        if give_output:
+            self.print_output()
+
         next_output_time += output_timestep
         output_number += 1
 
@@ -382,7 +378,8 @@ class Simulation:
         mean_square_speed_array = np.zeros_like(time_array)  # array for mss
         mean_square_speed_array[0] = self.box_of_particles.compute_mean_square_speed()
 
-        print('Event driven simulation in progress..')
+        if give_output:
+            print('Event driven simulation in progress..')
         # run until the simulation time has reached the stopping criterion
         while self.simulation_time < self.stopping_criterion:
             collision_tuple = heapq.heappop(self.box_of_particles.collision_queue)  # pop the earliest collision/event
@@ -403,19 +400,18 @@ class Simulation:
 
                 # update average energy for all particles
                 self.average_energy = self.box_of_particles.compute_energy()
-                # give output and save particle positions
-                self.print_output()
-                if save_positions:
-                    self.save_particle_positions(simulation_folder, output_number)
+                # give output
+                if give_output:
+                    self.print_output()
 
                 next_output_time += output_timestep
                 output_number += 1
             # if valid collision -> do it! If not discard it and try the next earliest etc.
             if self.box_of_particles.valid_collision(collision_tuple):
                 self.perform_collision(time_at_collision, collision_tuple, t_max=self.stopping_criterion)
-
-        print('Simulation done!')
-        print('---------------------')
+        if give_output:
+            print('Simulation done!')
+            print('---------------------')
         return time_array, mean_square_displacement_array, mean_square_speed_array
 
     def simulate_mean_free_path(self, simulation_label, output_timestep=1.0, save_positions=True):
