@@ -1,7 +1,6 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 
 import utility_functions as util_funcs
 
@@ -18,7 +17,8 @@ class SDESolver:
     """
         Class used to solve different SDEs by applying some numerical discretization methods. Is mainly used to solve
         the underdamped Langevin equation and underdamped scaled brownian motion by applying the Euler-Maruyama method.
-         It does the Euler-Maruyama method for a given number of particles and return ensemble averages of the MSD.
+         It does the Euler-Maruyama method for a given number of particles and return ensemble averages of the
+         mean square displacement and the mean square speed.
     """
     def __init__(self, t_start, t_stop, dt, number_of_particles, constants):
         """
@@ -81,7 +81,7 @@ class SDESolver:
         """
         return params[0] / (1 + times / params[2])
 
-    def euler_maruyama_method(self, friction_func, diffusivity_func):
+    def euler_maruyama_method(self, friction_func, diffusivity_func, initial_speed):
         """
             Implementation of the Euler-Maruyama iterative scheme for a general SDE describing Brownian motion. It can
             be used for both the underdamped Langevin equation and UDSBM which differ due to the time dependence of the
@@ -90,9 +90,10 @@ class SDESolver:
         underdamped_langevin_equation or friction_udsbm for the two different SDEs.
         :param diffusivity_func: function giving the diffusivity at all times. Is given as diffusivity_underdamped_
         langevin_equation or diffusivity_udsbm for the two different SDEs.
+        :param initial_speed: initial speed of all particles
         return times, positions_at_all_times, velocities_at_all_times
         """
-        v0 = util_funcs.random_uniformly_distributed_velocities(self.N, np.sqrt(2), 3)  # initial velocities
+        v0 = util_funcs.random_uniformly_distributed_velocities(self.N, initial_speed, 3)  # initial velocities
         x0 = np.tile([0.5, 0.5, 0.5], reps=(self.N, 1))  # initial positions
         # create arrays for all positions and velocities at all timesteps
         positions = np.zeros((self.number_of_timesteps + 1, self.N, 3))
@@ -116,7 +117,7 @@ class SDESolver:
 
         return times, positions, velocities
 
-    def strong_taylor_method(self, friction_func, diffusivity_func):
+    def strong_taylor_method(self, friction_func, diffusivity_func, initial_speed):
         """
             Implementation of the Strong Taylor iterative scheme for a general SDE describing Brownian motion. It can
             be used for both the underdamped Langevin equation and UDSBM which differ due to the time dependence of the
@@ -125,9 +126,10 @@ class SDESolver:
         underdamped_langevin_equation or friction_udsbm for the two different SDEs.
         :param diffusivity_func: function giving the diffusivity at all times. Is given as diffusivity_underdamped_
         langevin_equation or diffusivity_udsbm for the two different SDEs.
+        :param initial_speed: initial speed of all particles
         return times, positions_at_all_times, velocities_at_all_times
         """
-        v0 = util_funcs.random_uniformly_distributed_velocities(self.N, np.sqrt(2), 3)  # initial velocities
+        v0 = util_funcs.random_uniformly_distributed_velocities(self.N, initial_speed, 3)  # initial velocities
         x0 = np.tile([0.5, 0.5, 0.5], reps=(self.N, 1))  # initial positions
         # create arrays for all positions and velocities at all timesteps
         positions = np.zeros((self.number_of_timesteps + 1, self.N, 3))
@@ -155,30 +157,23 @@ class SDESolver:
 
         return times, positions, velocities
 
-    def ensemble_msd(self, friction_func, diffusivity_func):
+    def ensemble_msd(self, friction_func, diffusivity_func, initial_speed):
         """
-            Help function to compute the ensemble mean square displacement and the ensemble mean square speed from the
-            solution to a SDE for Brownian motion and save to file.
+            Help function to compute the ensemble mean square displacement and the mean square speed from
+            the solution to a SDE for Brownian motion.
         :param friction_func: function giving the friction coefficient at all times. Is given as friction_coefficient_
         underdamped_langevin_equation or friction_udsbm for the two different SDEs.
         :param diffusivity_func: function giving the diffusivity at all times. Is given as diffusivity_underdamped_
         langevin_equation or diffusivity_udsbm for the two different SDEs.
+        :param initial_speed: initial speed of all particles
+        :return time_array, mean_quadratic_distance_array, mean_quadratic_speed_array.
         """
-        times, positions, velocities = self.euler_maruyama_method(friction_func, diffusivity_func)
+        times, positions, velocities = self.euler_maruyama_method(friction_func, diffusivity_func, initial_speed)
         dx = positions - positions[0, :, :]  # compute the dx vector from the initial position for all particles
         msd = np.mean(norm(dx, axis=2) ** 2, axis=1)  # compute the mean square displacement
         mss = np.mean(norm(velocities, axis=2) ** 2, axis=1)  # compute the mean square speed
 
-        msd_matrix = np.zeros((len(times), 3))
-        msd_matrix[:, 0] = times
-        msd_matrix[:, 1] = msd
-        msd_matrix[:, 2] = mss
-        if self.constants[2] == np.inf:  # for a molecular gas tau is equal to inf
-            np.save(os.path.join(results_folder, f"msd_sde_N_{self.N}_xi_1_tstop_{self.t_stop}_dt_{self.dt}"),
-                    arr=msd_matrix)
-        else:  # granular gas for which we have only considered xi = 0.8.
-            np.save(os.path.join(results_folder, f"msd_sde_N_{self.N}_xi_0.8_tstop_{self.t_stop}_dt_{self.dt}"),
-                    arr=msd_matrix)
+        return times, msd, mss
 
     # TODO: fix the time average msd
     def A(self, times, delta, gamma0, T0):
@@ -238,3 +233,55 @@ def trajectory_ex(t_start=0, t_stop=1, dt=2**(-4), x0=np.array([1])):
     plt.plot(time, x_exact, label='Exact solution')
     plt.legend()
     plt.show()
+
+
+def mean_square_displacement_from_sde(particle_parameters, sde_parameters, number_of_runs):
+    """
+        Function used to compute mean square displacement and mean square speed of the particles for the different
+        SDEs describing Brownian motion. This function use the class SDESolver to get the results and
+        then saves them to file.
+    :param particle_parameters: [N, xi, v0, r] used to get correct constants and size of arrays
+    :param sde_parameters: [t_stop, dt] used to do the Euler-Maruyama iterative scheme for SDEs.
+    :param number_of_runs: int telling how many different runs to do in order to check convergence from clt.
+    """
+    N, xi, v0, r = int(particle_parameters[0]), particle_parameters[1], particle_parameters[2], particle_parameters[3]
+    t_stop, dt = sde_parameters[0], sde_parameters[1]
+    if xi == 1:
+        assert N == 1000 and r == 0.025, "Given values for gamma0, d0 are only valid for N=1000 and r=0.025!"
+        gamma0, d0, tau = 11.43, 0.058, np.inf
+    else:
+        # compute correct gamma0, d0, tau_0 from N, r and xi. See report for equations
+        n = N / 1
+        eta = n * 4 * np.pi * r ** 3 / 3
+        g = (2 - eta) / (2 * (1 - eta) ** 3)
+        m = 1
+        T0 = v0**2/3
+        d0 = 3*np.sqrt(T0)/((1+xi)**2*np.sqrt(m*np.pi)*n*g*(2*r)**2*2)
+        gamma0 = T0/(d0*m)
+        tau = (np.sqrt(T0 / m) * (1 - xi ** 2) / 6 * 4 * np.sqrt(np.pi) * g * (2 * r) ** 2 * n) ** (-1)
+        tau = np.round(tau, decimals=2)
+        gamma0 = np.round(gamma0, decimals=2)
+        d0 = np.round(d0, decimals=3)
+
+    # initialize parameters for memory concern
+    number_of_values = int(t_stop/dt)+1
+    times = np.zeros(number_of_values)
+    msd = np.zeros_like(times)
+    mss = np.zeros_like(times)
+
+    for run_number in range(number_of_runs):
+        print(f'Run number: {run_number}')
+        sde_solver = SDESolver(t_start=0, t_stop=t_stop, dt=dt, number_of_particles=N, constants=[gamma0, d0, tau])
+        if xi == 1:
+            times, msd, mss = sde_solver.ensemble_msd(sde_solver.friction_underdamped_langevin_equation,
+                                                      sde_solver.diffusivity_underdamped_langevin_equation, v0)
+        else:
+            times, msd, mss = sde_solver.ensemble_msd(sde_solver.friction_udsbm, sde_solver.diffusivity_udsbm, v0)
+        # store data in matrix
+        msd_matrix = np.zeros((len(times), 3))
+        msd_matrix[:, 0] = times
+        msd_matrix[:, 1] = msd
+        msd_matrix[:, 2] = mss
+        # save matrix to file
+        np.save(file=os.path.join(results_folder, f'msd_sde_N_{N}_r_{r}_xi_{xi}_tstop_{t_stop}_dt_{dt}_{run_number}'),
+                arr=msd_matrix)

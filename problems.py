@@ -5,7 +5,7 @@ import numpy as np
 
 import utility_functions as util_funcs
 
-from sde_solver import SDESolver
+from sde_solver import mean_square_displacement_from_sde
 
 from config import init_folder
 
@@ -49,17 +49,21 @@ args = vars(parser.parse_args())
 p = args['p']  # problem choice. Default: 0
 N = args['N']  # number of particles. Default: 1000
 xi = args['xi']  # restitution coefficient. Default: 1 -> molecular gas
-assert 0 <= xi <= 1  # check if xi in correct range. Script will stop otherwise
 radius = args['r']
-# check if there exist initial value files for the given particle data
-assert os.path.isfile(os.path.join(init_folder, f'uniform_pos_N_{N}_rad_{radius}_3d.npy')) or \
-       os.path.isfile(os.path.join(init_folder, f'uniform_pos_N_{N}_rad_{radius}_2d.npy'))
 stopping_criterion = args['sc']  # stopping criterion. Given as t_stop or avg_numb_coll_stop. Default: 1
 dt = args['dt']  # Timestep value. Used for discretization of time of outputs or sde solution. Default: 0.1
 tc = args['tc']  # duration of contact used to implement TC model. Default: 0
 number_of_cores = args['nc']  # number of cores to use for parallelization. Default: 1
 number_of_runs = args['nr']  # number of runs to use for parallelization. Default: 1
-
+# use assert to make sure that the choice of problem with parameters can be performed
+assert 0 <= xi <= 1, "Restitution coefficient not in valid range in [0, 1]"
+if p != 5:
+    assert os.path.isfile(os.path.join(init_folder, f'uniform_pos_N_{N}_rad_{radius}_3d.npy')) or \
+           os.path.isfile(os.path.join(init_folder, f'uniform_pos_N_{N}_rad_{radius}_2d.npy')), "Cannot do event " \
+                                                                                                "driven simulation " \
+                                                                                                "for given N and r."
+else:
+    assert number_of_cores == 1, "SDE solver should only use one core due to memory concerns."
 # choose what problem one want to solve by simulating particle collisions in 3D or solving SDE
 problem = {0: 'Testing',
            1: 'Visualization 2D',
@@ -123,17 +127,9 @@ elif problem == 'Mean square displacement':
                                            number_of_runs=number_of_cores)
 elif problem == 'SDE solver':
     t_stop = int(stopping_criterion)
-    if xi == 1:
-        gamma0, d0, tau = 11.43, 0.058, np.inf
-        sde_solver = SDESolver(t_start=0, t_stop=t_stop, dt=dt, number_of_particles=N, constants=[gamma0, d0, tau])
-        sde_solver.ensemble_msd(sde_solver.friction_underdamped_langevin_equation,
-                                sde_solver.diffusivity_underdamped_langevin_equation)
-    elif xi == 0.8:
-        gamma0, d0, tau = 9.26, 0.072, 0.97
-        sde_solver = SDESolver(t_start=0, t_stop=t_stop, dt=dt, number_of_particles=N, constants=[gamma0, d0, tau])
-        sde_solver.ensemble_msd(sde_solver.friction_udsbm, sde_solver.diffusivity_udsbm)
-    else:
-        print('SDE is currently solved for xi=1 or xi=0.8. Change parameters for other values of xi!!')
+    mean_square_displacement_from_sde(particle_parameters=[N, xi, v0, radius],
+                                      sde_parameters=[t_stop, dt],
+                                      number_of_runs=number_of_runs)
 elif problem == 'Mean free path':
     t_stop = int(stopping_criterion)
     timestep = dt
