@@ -8,10 +8,7 @@ from particle_box import ParticleBox
 from simulation import Simulation
 from config import results_folder, init_folder
 
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-
-# Various utility functions
+# Various utility functions used to solve the problems in problems.py.
 
 
 def random_positions_for_given_radius(number_of_particles, radius, dimensions):
@@ -81,46 +78,6 @@ def validate_positions(positions, radius):
     else:
         print('Overlapping positions!!')
     print(f'Smallest dist: {smallest_distance} 2r: {2 * radius}')
-
-
-def plot_positions_3d(positions, radius):
-    """
-        Function that plots the position of all the particles in a 3d cube.
-    :param positions: (N, 3) array with x-, y- and z-positions of all the particles.
-    :param radius: radius of the particles.
-    """
-    validate_positions(positions, radius)
-    fig = plt.figure()
-    ax = Axes3D(fig)
-    # ax.scatter(positions[:, 0], positions[:, 1], positions[:, 2], 'o', s=(r*450)**2)
-    ax.scatter(positions[:, 0], positions[:, 1], positions[:, 2], 'o')
-    plt.show()
-
-
-def check_speed_distribution(number_of_particles, radius):
-    """
-        Help function to verify the speed distribution of a given initial velocities.
-    :param number_of_particles: number of particles.
-    :param radius: radius of the particles.
-    """
-    velocities = np.load(os.path.join(init_folder, f'eq_velocity_N_{number_of_particles}_rad_{radius}_3d.npy'))
-    speeds = norm(velocities, axis=1)
-    avg_speed = np.mean(speeds)
-    avg_quadratic_speed = np.mean(speeds**2)
-    print(f'Var: {np.var(speeds)}')
-    print(f'<v>^2: {avg_speed**2}')
-    print(f'<v^2>: {avg_quadratic_speed}')
-    v = np.linspace(0, 3, 100)
-    alpha = 1/avg_quadratic_speed
-    p = 2*alpha*v*np.exp(-alpha*v**2)
-    kT = avg_quadratic_speed/3
-    p3d = (1/(2*np.pi*kT))**(3/2)*4*np.pi*v**2 * np.exp(-v**2/(2*kT))
-    plt.hist(speeds, bins=100, density=True)
-    plt.plot(v, p, label='2D')
-    plt.plot(v, p3d, label='3D')
-    plt.title(r'$\langle v \rangle = {}$'.format(avg_speed))
-    plt.legend()
-    plt.show()
 
 
 def random_uniformly_distributed_velocities(number_of_particles, v0, dimensions):
@@ -206,83 +163,6 @@ def create_visualization_system(particle_parameters, simulation_parameters, run_
                                                     save_positions=True)
     print('Validation after..')
     validate_positions(simulation.box_of_particles.positions, r)
-
-
-def simulate_disease_outbreak(particle_parameters, simulation_parameters):
-    """
-        Function used to conduct 2D simulations of a disease outbreak.
-    :param particle_parameters: array of [N, xi, v0, radius] used to initialize a ParticleBox.
-    :param simulation_parameters: array of [t_stop, output_timestep, tc] used to initialize a Simulation.
-    """
-    N, xi, v0, r = int(particle_parameters[0]), particle_parameters[1], particle_parameters[2], particle_parameters[3]
-    t_stop, timestep, tc = simulation_parameters[0], simulation_parameters[1], simulation_parameters[2]
-    positions = np.zeros((N, 3))
-    positions[:, :2] = np.load(os.path.join(init_folder, f'uniform_pos_N_{N}_rad_{r}_2d.npy'))
-    positions[:, 2] = 0.5
-
-    print('Validation of positions..')
-    validate_positions(positions, r)
-
-    radii = np.ones(N) * r  # all particles have the same radius
-    mass = np.ones(N)  # all particles get initially the same mass
-
-    home_percents = [0, 0.25, 0.5, 0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]
-
-    for i, home_percent in enumerate(home_percents):
-        np.random.shuffle(positions)  # shuffle to get a particle starting out with the infection every time
-        mass[:int(home_percent*N)] = 1e+06  # use large mass to easy identify particle who stay at home with v=0
-
-        velocities = np.zeros((N, 3))
-        velocities[:, :2] = random_uniformly_distributed_velocities(N, v0, 2)
-        velocities[:int(home_percent*N), :] = 0
-
-        box_of_particles = ParticleBox(number_of_particles=N,
-                                       restitution_coefficient=xi,
-                                       initial_positions=positions,
-                                       initial_velocities=velocities,
-                                       masses=mass,
-                                       radii=radii,
-                                       pbc=False)
-
-        simulation = Simulation(box_of_particles=box_of_particles, stopping_criterion=t_stop, tc=tc)
-        time_array, infected_rate, recovered_rate = \
-            simulation.simulate_disease_outbreak(f'disease_outbreak_hp_{home_percent}',
-                                                 output_timestep=timestep, save_positions=False)
-
-        disease_matrix = np.zeros((len(time_array), 3))
-        disease_matrix[:, 0] = time_array
-        disease_matrix[:, 1] = infected_rate
-        disease_matrix[:, 2] = recovered_rate
-
-        np.save(file=os.path.join(results_folder, f'disease_matrix_N_{N}_rad_{r}_hp_{home_percent}'),
-                arr=disease_matrix)
-
-
-def test_inelastic_collapse():
-    # TODO: atm used to test inelastic collapse in 2D system. Needs to be updated for 3D simulations.
-    N = 3
-    xi = 0.13
-    v0 = 0.2
-    rad = 0.05
-    mass = np.ones(N)
-    radii = np.ones(N)*rad
-    # positions = np.array([[0.25, 0.5], [0.4, 0.5], [0.75, 0.5]])
-    # velocities = np.array([[v0, 0], [0, 0], [-v0, 0]])
-    positions = np.array([[0.25, 0.5], [0.36, 0.5], [0.75, 0.5]])
-    velocities = np.array([[v0, 0], [0, 0], [-v0, 0]])
-
-    box_of_particles = ParticleBox(number_of_particles=N,
-                                   restitution_coefficient=xi,
-                                   initial_positions=positions,
-                                   initial_velocities=velocities,
-                                   masses=mass,
-                                   radii=radii,
-                                   pbc=False)
-
-    simulation = Simulation(box_of_particles=box_of_particles, stopping_criterion=20, tc=0)
-    simulation.simulate_until_given_number_of_collisions(f'inelastic_collapse', output_timestep=0.01,
-                                                         save_positions=True)
-    print(simulation.average_number_of_collisions)
 
 
 def speed_distribution(particle_parameters, simulation_parameters, run_number):
@@ -398,7 +278,7 @@ def get_simulation_statistics(particle_parameters, simulation_parameters, run_nu
 def mean_square_displacement(particle_parameters, simulation_parameters, run_number):
     """
         Function to do an event driven simulation until a given time and save to file the msd and mss
-        as a function of time for all particles.
+        as a function of time for all particles. Can be run on HPC due to no output!
     :param particle_parameters: array of [N, xi, v0, radius] used to initialize a ParticleBox.
     :param simulation_parameters: array of [t_stop, output_timestep, tc] used to initialize a Simulation.
     :param run_number: int used such that one can run parallel simulations and save results to different files.
@@ -476,3 +356,53 @@ def mean_free_path(particle_parameters, simulation_parameters, run_number):
     simulation = Simulation(box_of_particles=box_of_particles, stopping_criterion=t_stop, tc=tc)
 
     simulation.simulate_mean_free_path('mfp', output_timestep=timestep, save_positions=False)
+
+
+def simulate_disease_outbreak(particle_parameters, simulation_parameters):
+    """
+        Function used to conduct 2D simulations of a disease outbreak.
+    :param particle_parameters: array of [N, xi, v0, radius] used to initialize a ParticleBox.
+    :param simulation_parameters: array of [t_stop, output_timestep, tc] used to initialize a Simulation.
+    """
+    N, xi, v0, r = int(particle_parameters[0]), particle_parameters[1], particle_parameters[2], particle_parameters[3]
+    t_stop, timestep, tc = simulation_parameters[0], simulation_parameters[1], simulation_parameters[2]
+    positions = np.zeros((N, 3))
+    positions[:, :2] = np.load(os.path.join(init_folder, f'uniform_pos_N_{N}_rad_{r}_2d.npy'))
+    positions[:, 2] = 0.5
+
+    print('Validation of positions..')
+    validate_positions(positions, r)
+
+    radii = np.ones(N) * r  # all particles have the same radius
+    mass = np.ones(N)  # all particles get initially the same mass
+
+    home_percents = [0, 0.25, 0.5, 0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]
+
+    for i, home_percent in enumerate(home_percents):
+        np.random.shuffle(positions)  # shuffle to get a particle starting out with the infection every time
+        mass[:int(home_percent*N)] = 1e+06  # use large mass to easy identify particle who stay at home with v=0
+
+        velocities = np.zeros((N, 3))
+        velocities[:, :2] = random_uniformly_distributed_velocities(N, v0, 2)
+        velocities[:int(home_percent*N), :] = 0
+
+        box_of_particles = ParticleBox(number_of_particles=N,
+                                       restitution_coefficient=xi,
+                                       initial_positions=positions,
+                                       initial_velocities=velocities,
+                                       masses=mass,
+                                       radii=radii,
+                                       pbc=False)
+
+        simulation = Simulation(box_of_particles=box_of_particles, stopping_criterion=t_stop, tc=tc)
+        time_array, infected_rate, recovered_rate = \
+            simulation.simulate_disease_outbreak(f'disease_outbreak_hp_{home_percent}',
+                                                 output_timestep=timestep, save_positions=False)
+
+        disease_matrix = np.zeros((len(time_array), 3))
+        disease_matrix[:, 0] = time_array
+        disease_matrix[:, 1] = infected_rate
+        disease_matrix[:, 2] = recovered_rate
+
+        np.save(file=os.path.join(results_folder, f'disease_matrix_N_{N}_rad_{r}_hp_{home_percent}'),
+                arr=disease_matrix)

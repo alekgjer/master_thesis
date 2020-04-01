@@ -200,7 +200,7 @@ class Simulation:
             self.box_of_particles.collision_queue = []
             self.box_of_particles.create_initial_priority_queue(t_max)
 
-    def simulate_until_given_number_of_collisions(self, simulation_label, output_timestep=1.0, save_positions=True):
+    def simulate_until_given_number_of_collisions(self, simulation_label, output_timestep=1.0, save_positions=False):
         """
             Implementation of the event driven simulation where the stopping criterion is given as a limit of
             how much one want the average number of collisions to be. Is useful when wanting to create equilibrium
@@ -208,7 +208,7 @@ class Simulation:
         :param simulation_label: string containing information about the simulation to identify simulation.
         :param output_timestep: parameter used to determine how often do to an output in the simulation.
         :param save_positions: boolean variable used to indicate if one want to save positions. Since saving takes some
-        capacity and it is not so interesting when doing multiple runs one have the option to not save positions.
+        capacity and it is not so interesting when doing multiple runs one has the option to not save positions.
         """
         print('Simulate until a given average number of collisions..')
         print(f'N: {self.box_of_particles.N} and xi: {self.box_of_particles.restitution_coefficient}..')
@@ -260,7 +260,7 @@ class Simulation:
         print('Simulation done!')
         print('---------------------')
 
-    def simulate_statistics_until_given_time(self, simulation_label, output_timestep=1.0, save_positions=True):
+    def simulate_statistics_until_given_time(self, simulation_label, output_timestep=1.0, save_positions=False):
         """
             Implementation of the event driven simulation where the stopping criterion is given as a limit of
             how much one want the simulation time to be. It is useful for looking at a property as a function of time.
@@ -414,7 +414,7 @@ class Simulation:
             print('---------------------')
         return time_array, mean_square_displacement_array, mean_square_speed_array
 
-    def simulate_mean_free_path(self, simulation_label, output_timestep=1.0, save_positions=True):
+    def simulate_mean_free_path(self, simulation_label, output_timestep=1.0, save_positions=False):
         """
             Implementation of the event driven simulation to do simulations of the mfp
         :param simulation_label: string containing information about the simulation to identify simulation.
@@ -554,7 +554,7 @@ class Simulation:
             self.box_of_particles.collision_queue = []
             self.box_of_particles.create_initial_priority_queue(t_max)
 
-    def simulate_disease_outbreak(self, simulation_label, output_timestep=1.0, save_positions=True):
+    def simulate_disease_outbreak(self, simulation_label, output_timestep=1.0, save_positions=False):
         """
             Implementation of the event driven simulation to do simulations of a disease outbreak
         :param simulation_label: string containing information about the simulation to identify simulation.
