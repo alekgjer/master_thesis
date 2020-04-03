@@ -359,21 +359,32 @@ class Simulation:
             print('Creating initial queue..')
 
         next_output_time = 0  # value that keeps track of when the next output will occur
-        output_number = 0  # value to keep the order of pictures saved at each output
+        output_number = 0  # value to keep the order of pictures saved at each output and get next output time
         # Initialize the queue with all starting collisions
         self.box_of_particles.create_initial_priority_queue(t_max=self.stopping_criterion)
 
         # initial energy for all particles
         self.average_energy = self.box_of_particles.compute_energy()
 
-        # give initial output
         if give_output:
             self.print_output()
 
-        next_output_time += output_timestep
         output_number += 1
+        # choose different setup for output data
+        if output_timestep > 0:  # for dt > 0 we use a constant resolution in time
+            time_array = np.zeros(int(self.stopping_criterion / output_timestep) + 1)  # array for time
+            next_output_time += output_timestep
+        else:  # for dt = 0 we use a logspace to get nice plots on logarithmic scales
+            if self.stopping_criterion >= 1000:
+                number_of_outputs = 100  # good value of point for 1000 and above
+            else:
+                number_of_outputs = 50  # good value of points for 10 and 100
 
-        time_array = np.zeros(int(self.stopping_criterion / output_timestep) + 1)  # array for time
+            time_array = np.zeros(number_of_outputs+1)  # array for time
+            # we add the number of outputs output times to the time array list in order to avoid using to time arrays
+            time_array[1:] = np.round(np.logspace(-2, np.log10(self.stopping_criterion), number_of_outputs), decimals=3)
+            next_output_time = time_array[output_number]
+
         mean_square_displacement_array = np.zeros_like(time_array)  # array for msd
         mean_square_speed_array = np.zeros_like(time_array)  # array for mss
         mean_square_speed_array[0] = self.box_of_particles.compute_mean_square_speed()
@@ -391,7 +402,7 @@ class Simulation:
                 self.box_of_particles.positions += self.box_of_particles.velocities * dt
                 self.simulation_time += dt
 
-                time_array[output_number] = self.simulation_time
+                time_array[output_number] = self.simulation_time  # save time of output
 
                 # compute mean square displacement from starting position for all particles
                 mean_square_displacement_array[output_number] = self.box_of_particles.compute_mean_square_displacement()
@@ -400,12 +411,21 @@ class Simulation:
 
                 # update average energy for all particles
                 self.average_energy = self.box_of_particles.compute_energy()
-                # give output
+
                 if give_output:
                     self.print_output()
 
-                next_output_time += output_timestep
                 output_number += 1
+
+                if output_timestep > 0:  # for constant resolution in time the next output is after dt time
+                    next_output_time += output_timestep
+                else:
+                    if output_number == len(time_array):  # in order to avoid error on last output we use inf as next
+                        next_output_time = np.inf
+                    else:
+                        # for logarithmic timescale the next output is given as the next element in the time array
+                        next_output_time = time_array[output_number]
+
             # if valid collision -> do it! If not discard it and try the next earliest etc.
             if self.box_of_particles.valid_collision(collision_tuple):
                 self.perform_collision(time_at_collision, collision_tuple, t_max=self.stopping_criterion)

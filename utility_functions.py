@@ -315,13 +315,8 @@ def mean_square_displacement(particle_parameters, simulation_parameters, run_num
     msd_matrix[:, 2] = mss_array
     offset = 0  # for later runs where one want more runs without deleting the earlier runs
     # save to file
-    if tc == 0:
-        np.save(file=os.path.join(results_folder, f'msd_3d_pbc_eq_start_N_{N}_r_{r}_xi_{xi}_tstop_{t_stop}_lgtc_-inf_'
-                                                  f'{run_number+offset}'), arr=msd_matrix)
-    else:
-        np.save(file=os.path.join(results_folder,
-                                  f'msd_3d_pbc_eq_start_N_{N}_r_{r}_xi_{xi}_tstop_{t_stop}_lgtc_{np.log10(tc)}_'
-                                  f'{run_number + offset}'), arr=msd_matrix)
+    np.save(file=os.path.join(results_folder, f'msd_pbc_eq_start_N_{N}_r_{r}_xi_{xi}_tstop_{t_stop}_dt_{timestep}'
+                                              f'_{run_number+offset}'), arr=msd_matrix)
 
 
 def mean_free_path(particle_parameters, simulation_parameters, run_number):

@@ -124,7 +124,7 @@ elif problem == 'Mean square displacement':
                                            simulation_parameters=[t_stop, timestep, tc],
                                            simulation_function=util_funcs.mean_square_displacement,
                                            number_of_cores=number_of_cores,
-                                           number_of_runs=number_of_cores)
+                                           number_of_runs=number_of_runs)
 elif problem == 'SDE solver':
     t_stop = int(stopping_criterion)
     mean_square_displacement_from_sde(particle_parameters=[N, xi, v0, radius],
