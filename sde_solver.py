@@ -17,10 +17,11 @@ class SDESolver:
     """
         Class used to solve different SDEs by applying some numerical discretization methods. Is mainly used to solve
         the underdamped Langevin equation and underdamped scaled brownian motion by applying the Euler-Maruyama method.
-         It does the Euler-Maruyama method for a given number of particles and return ensemble averages of the
-         mean square displacement and the mean square speed.
+        It does the Euler-Maruyama method for a given number of particles and return ensemble averages of the
+        mean square displacement and the mean square speed. Can also perform the Strong Taylor method, but since
+        the results from the Euler-Maruyama method is so good higher order methods are not needed.
     """
-    def __init__(self, t_start, t_stop, dt, number_of_particles, constants):
+    def __init__(self, t_start, t_stop, dt, number_of_particles, constants, method='em'):
         """
         Initialize a SDESolver object with the needed parameters of when to start, when to stop, timestep value,
         number of particles to use and constant achieved from theory.
@@ -29,6 +30,7 @@ class SDESolver:
         :param dt: timestep value. Choose how often to update the positions and velocities of the particles
         :param number_of_particles: the number of particles to use for ensemble averages
         :param constants: the value used for [gamma0, d0, tau]. Is used to get correct diffusivity and friction.
+        :param method: string containing the method of choice, e.g "em" or "st".
         """
         self.N = number_of_particles
         self.t_0 = t_start
@@ -37,61 +39,117 @@ class SDESolver:
         self.number_of_timesteps = int((self.t_stop - self.t_0) / self.dt)
         self.N = number_of_particles
         self.constants = constants
+        self.method = method
 
     @staticmethod
-    def diffusivity_underdamped_langevin_equation(times, params):
+    def a_underdamped_langevin_equation(z, t, params):
         """
-            Help function to compute the diffusivity at all times for the underdamped Langevin equation, which off
-            course is constant.
-        :param times: array of different times to get the diffusivity
-        :param params: [gamma0, d0, tau]
-        return an array of d0 with the same shape as times
+            Function giving a in the SDE given as the underdamped Langevin equation.
+        :param z: the velocity of all the particles as a (N, 3) array.
+        :param t: time. Is not used here as a is not dependent explicitly on time.
+        :param params: [gamma0, d0, tau].
+        return a as a function of the velocity of the particles
         """
-        return np.ones_like(times)*params[1]
+        return - z * params[0]
 
     @staticmethod
-    def diffusivity_udsbm(times, params):
+    def da_dz_underdamped_langevin_equation(z, t, params):
         """
-            Help function to compute the diffusivity at all times for UDSBM, which decays as a function of time.
-        :param times: array of different times to get the diffusivity
-        :param params: [gamma0, d0, tau]
-        return an array of the diffusivity at different times
+            Function giving da_dz in the SDE given as the underdamped Langevin equation.
+        :param z: the velocity of all the particles as a (N, 3) array.
+        :param t: time. Is not used here as da_dz is not dependent explicitly on time.
+        :param params: [gamma0, d0, tau].
+        return da_dz as a constant
         """
-        return params[1]/(1+times/params[2])
+        return -params[0]
 
     @staticmethod
-    def friction_underdamped_langevin_equation(times, params):
+    def b_underdamped_langevin_equation(z, t, params):
         """
-            Help function to compute the friction coefficient at all times for the underdamped Langevin equation,
-            which off course is constant.
-        :param times: array of different times to get the friction coefficient
-        :param params: [gamma0, d0, tau]
-        return an array of gamma0 with the same shape as times
+            Function giving b in the SDE given as the underdamped Langevin equation.
+        :param z: the velocity of all the particles as a (N, 3) array.
+        :param t: time. Is not used here as b is not dependent explicitly on time.
+        :param params: [gamma0, d0, tau].
+        return b as a constant
         """
-        return np.ones_like(times) * params[0]
+        return np.sqrt(2*params[1])*params[0]
 
     @staticmethod
-    def friction_udsbm(times, params):
+    def a_udsbm(z, t, params):
         """
-            Help function to compute the friction coefficient at all times for UDSBM, which decays as a function
-            of time.
-        :param times: array of different times to get the friction coefficient
-        :param params: [gamma0, d0, tau]
-        return an array of the friction coefficient at different times
+            Function giving a in the SDE given as UDSBM.
+        :param z: the velocity of all the particles as a (N, 3) array.
+        :param t: time. Is used here as a is dependent explicitly on time.
+        :param params: [gamma0, d0, tau].
+        return a as a function of the velocity of the particles and time
         """
-        return params[0] / (1 + times / params[2])
+        return - z * params[0]/(1+t/params[2])
 
-    def euler_maruyama_method(self, friction_func, diffusivity_func, initial_speed):
+    @staticmethod
+    def da_dz_udsbm(z, t, params):
         """
-            Implementation of the Euler-Maruyama iterative scheme for a general SDE describing Brownian motion. It can
+            Function giving da_dz in the SDE given as UDSBM.
+        :param z: the velocity of all the particles as a (N, 3) array.
+        :param t: time. Is used here as da_dz is dependent explicitly on time.
+        :param params: [gamma0, d0, tau].
+        return da_dz as a function of time
+        """
+        return -params[0]/(1+t/params[2])
+
+    @staticmethod
+    def b_udsbm(z, t, params):
+        """
+            Function giving b in the SDE given as UDSBM.
+        :param z: the velocity of all the particles as a (N, 3) array
+        :param t: time. Is used here as b is dependent explicitly on time.
+        :param params: [gamma0, d0, tau].
+        return b as a function of time
+        """
+        return np.sqrt(2*params[1]/(1+t/params[2]))*params[0]/(1+t/params[2])
+
+    def euler_maruyama_method(self, z, a, b, t):
+        """
+            Taking a step in the Euler-Maruyama iterative scheme for a general SDE describing Brownian motion. It can
             be used for both the underdamped Langevin equation and UDSBM which differ due to the time dependence of the
-            friction coefficient and the diffusivity. Other than that they are equal.
-        :param friction_func: function giving the friction coefficient at all times. Is given as friction_coefficient_
-        underdamped_langevin_equation or friction_udsbm for the two different SDEs.
-        :param diffusivity_func: function giving the diffusivity at all times. Is given as diffusivity_underdamped_
-        langevin_equation or diffusivity_udsbm for the two different SDEs.
-        :param initial_speed: initial speed of all particles
-        return times, positions_at_all_times, velocities_at_all_times
+            friction coefficient and the diffusivity giving different a and b. Gives the velocity at next timestep.
+        :param z: the velocity of all the particles as a (N, 3) array.
+        :param a: function giving the velocity and time dependence of the a term in the SDE.
+        :param b: function giving the velocity and time dependence of the b term in the SDE.
+        return the velocity at the next timestep
+        """
+        # the random force is a Wiener process, drawn from a normal distribution with mu = 0, sigma = sqrt(dt)
+        dW = np.random.normal(loc=0, scale=np.sqrt(self.dt), size=(self.N, 3))
+        # return the velocity at the next timestep as a function of the previous velocity and time
+        return z + a(z, t, self.constants)*self.dt + b(z, t, self.constants) * dW
+
+    def strong_taylor_method(self, z, a, b, da_dz, time):
+        """
+            Taking a step in the strong Taylor iterative scheme for a general SDE describing Brownian motion. It can
+            be used for both the underdamped Langevin equation and UDSBM which differ due to the time dependence of the
+            friction coefficient and the diffusivity giving different a and b. Gives the velocity at next timestep.
+        :param z: the velocity of all the particles as a (N, 3) array.
+        :param a: function giving the velocity and time dependence of the a term in the SDE.
+        :param b: function giving the velocity and time dependence of the b term in the SDE.
+        return the velocity at the next timestep
+        """
+        random_numb_1 = np.random.randn(self.N, 3)
+        random_numb_2 = np.random.randn(self.N, 3)
+        dW = random_numb_1 * np.sqrt(self.dt)
+        dZ = (random_numb_1 + random_numb_2 / np.sqrt(3)) * self.dt ** (3 / 2) / 2
+        return z + a(z, time, self.constants) * self.dt + b(z, time, self.constants) * dW + \
+               b(z, time, self.constants) * da_dz(z, time, self.constants) * dZ + \
+               a(z, time, self.constants) * da_dz(z, time, self.constants) * self.dt**2 / 2
+
+    def trajectory(self, a, b, initial_speed):
+        """
+            Help function to do a iterative scheme of a method in order to solve a SDE describing Brownian motion. From
+            input of the function for the a and b is can solve different SDEs, as the underdamped Langevin equation
+            or UDSBM. The function creates initial conditions, updates the position from the velocity, and updates the
+            velocity by applying a method such as the Euler-Maruyama method or the Strong Taylor method.
+        :param a: function giving the velocity and time dependence of the a term in the SDE.
+        :param b: function giving the velocity and time dependence of the b term in the SDE.
+        :param initial_speed: float giving the initial speed of all the particles, default sqrt(2).
+        return the times, positions and velocities computed with given method
         """
         v0 = util_funcs.random_uniformly_distributed_velocities(self.N, initial_speed, 3)  # initial velocities
         x0 = np.tile([0.5, 0.5, 0.5], reps=(self.N, 1))  # initial positions
@@ -102,73 +160,36 @@ class SDESolver:
         positions[0, :, :] = x0
         velocities[0, :, :] = v0
 
-        times = np.arange(self.number_of_timesteps + 1) * self.dt
+        times = np.arange(self.number_of_timesteps + 1) * self.dt  # compute the time at all timesteps
 
-        gamma_t = friction_func(times, self.constants)
-        d_t = diffusivity_func(times, self.constants)
-
-        # compute the Euler-Maruyama iterative scheme for all particles simultaneously
-        for i in range(self.number_of_timesteps):
-            # the random force is a Wiener process, drawn from a normal distribution with mu = 0, sigma = sqrt(dt)
-            dW = np.random.normal(loc=0, scale=np.sqrt(self.dt), size=(self.N, 3))
-            positions[i + 1, :, :] = positions[i, :, :] + velocities[i, :, :] * self.dt
-            velocities[i + 1, :, :] = velocities[i, :, :] - gamma_t[i] * velocities[i, :, :] * self.dt + \
-                                      np.sqrt(2 * d_t[i]) * gamma_t[i] * dW
-
-        return times, positions, velocities
-
-    def strong_taylor_method(self, friction_func, diffusivity_func, initial_speed):
-        """
-            Implementation of the Strong Taylor iterative scheme for a general SDE describing Brownian motion. It can
-            be used for both the underdamped Langevin equation and UDSBM which differ due to the time dependence of the
-            friction coefficient and the diffusivity. Other than that they are equal.
-        :param friction_func: function giving the friction coefficient at all times. Is given as friction_coefficient_
-        underdamped_langevin_equation or friction_udsbm for the two different SDEs.
-        :param diffusivity_func: function giving the diffusivity at all times. Is given as diffusivity_underdamped_
-        langevin_equation or diffusivity_udsbm for the two different SDEs.
-        :param initial_speed: initial speed of all particles
-        return times, positions_at_all_times, velocities_at_all_times
-        """
-        v0 = util_funcs.random_uniformly_distributed_velocities(self.N, initial_speed, 3)  # initial velocities
-        x0 = np.tile([0.5, 0.5, 0.5], reps=(self.N, 1))  # initial positions
-        # create arrays for all positions and velocities at all timesteps
-        positions = np.zeros((self.number_of_timesteps + 1, self.N, 3))
-        velocities = np.zeros_like(positions)
-        # initialize with initial values
-        positions[0, :, :] = x0
-        velocities[0, :, :] = v0
-
-        times = np.arange(self.number_of_timesteps + 1) * self.dt
-
-        gamma_t = friction_func(times, self.constants)
-        d_t = diffusivity_func(times, self.constants)
-
-        # compute the Strong taylor iterative scheme for all particles simultaneously
-        for i in range(self.number_of_timesteps):
-            random_numb_1 = np.random.randn(self.N, 3)
-            random_numb_2 = np.random.randn(self.N, 3)
-            dW = random_numb_1*np.sqrt(self.dt)
-            dZ = (random_numb_1+random_numb_2/np.sqrt(3))*self.dt**(3/2)/2
-            positions[i + 1, :, :] = \
-                positions[i, :, :] + velocities[i, :, :] * self.dt + velocities[i, :, :] * self.dt**2/2
-            velocities[i + 1, :, :] = velocities[i, :, :] - gamma_t[i] * velocities[i, :, :] * self.dt + \
-                                      np.sqrt(2 * d_t[i]) * gamma_t[i] * dW - np.sqrt(2 * d_t[i]) * gamma_t[i]**2 * dZ \
-                                      + gamma_t[i]**2*velocities[i, :, :]*self.dt**2/2
+        # choose method and then compute the iterative scheme by updating the position and velocity at each timestep
+        if self.method == "em":
+            for i in range(self.number_of_timesteps):
+                positions[i + 1, :, :] = positions[i, :, :] + velocities[i, :, :] * self.dt
+                velocities[i + 1, :, :] = self.euler_maruyama_method(velocities[i, :, :], a, b, times[i])
+        elif self.method == "st":
+            if self.constants[2] == np.inf:
+                da_dz = self.da_dz_underdamped_langevin_equation
+            else:
+                da_dz = self.da_dz_udsbm
+            for i in range(self.number_of_timesteps):
+                positions[i + 1, :, :] = positions[i, :, :] + velocities[i, :, :] * self.dt
+                velocities[i + 1, :, :] = self.strong_taylor_method(velocities[i, :, :], a, b, da_dz, times[i])
 
         return times, positions, velocities
 
-    def ensemble_msd(self, friction_func, diffusivity_func, initial_speed):
+    def ensemble_msd(self, a, b, initial_speed):
         """
-            Help function to compute the ensemble mean square displacement and the mean square speed from
-            the solution to a SDE for Brownian motion.
-        :param friction_func: function giving the friction coefficient at all times. Is given as friction_coefficient_
-        underdamped_langevin_equation or friction_udsbm for the two different SDEs.
-        :param diffusivity_func: function giving the diffusivity at all times. Is given as diffusivity_underdamped_
-        langevin_equation or diffusivity_udsbm for the two different SDEs.
-        :param initial_speed: initial speed of all particles
+            Help function to compute the mean square displacement and the mean square speed for the solution to a SDE
+            describing Brownian motion. From input of the function for the a and b is can solve different SDEs, as the
+            underdamped Langevin equation or UDSBM. The function use the trajectory to create the position and velocity
+            at all times before computing the msd and mss and return it.
+        :param a: function giving the velocity and time dependence of the a term in the SDE.
+        :param b: function giving the velocity and time dependence of the b term in the SDE.
+        :param initial_speed: float giving the initial speed of all the particles, default sqrt(2).
         :return time_array, mean_quadratic_distance_array, mean_quadratic_speed_array.
         """
-        times, positions, velocities = self.euler_maruyama_method(friction_func, diffusivity_func, initial_speed)
+        times, positions, velocities = self.trajectory(a, b, initial_speed)
         dx = positions - positions[0, :, :]  # compute the dx vector from the initial position for all particles
         msd = np.mean(norm(dx, axis=2) ** 2, axis=1)  # compute the mean square displacement
         mss = np.mean(norm(velocities, axis=2) ** 2, axis=1)  # compute the mean square speed
@@ -239,9 +260,9 @@ def mean_square_displacement_from_sde(particle_parameters, sde_parameters, numbe
     """
         Function used to compute mean square displacement and mean square speed of the particles for the different
         SDEs describing Brownian motion. This function use the class SDESolver to get the results and
-        then saves them to file.
+        then saves them to file by applying the Euler-Maruyama method. Can be changed to use Strong Taylor as well.
     :param particle_parameters: [N, xi, v0, r] used to get correct constants and size of arrays
-    :param sde_parameters: [t_stop, dt] used to do the Euler-Maruyama iterative scheme for SDEs.
+    :param sde_parameters: [t_stop, dt] used to do a iterative scheme for SDEs.
     :param number_of_runs: int telling how many different runs to do in order to check convergence from clt.
     """
     N, xi, v0, r = int(particle_parameters[0]), particle_parameters[1], particle_parameters[2], particle_parameters[3]
@@ -262,6 +283,8 @@ def mean_square_displacement_from_sde(particle_parameters, sde_parameters, numbe
         tau = np.round(tau, decimals=2)
         gamma0 = np.round(gamma0, decimals=2)
         d0 = np.round(d0, decimals=3)
+        # the value of v0 below has better agreement with theory, but do not match initial T0..
+        # v0 = np.sqrt(3*d0*gamma0**2*tau/(gamma0*tau-1))  # for correct initial speed compared to theory
 
     # initialize parameters for memory concern
     number_of_values = int(t_stop/dt)+1
@@ -271,12 +294,17 @@ def mean_square_displacement_from_sde(particle_parameters, sde_parameters, numbe
 
     for run_number in range(number_of_runs):
         print(f'Run number: {run_number}')
-        sde_solver = SDESolver(t_start=0, t_stop=t_stop, dt=dt, number_of_particles=N, constants=[gamma0, d0, tau])
+        sde_solver = SDESolver(t_start=0,
+                               t_stop=t_stop,
+                               dt=dt,
+                               number_of_particles=N,
+                               constants=[gamma0, d0, tau],
+                               method='em')
         if xi == 1:
-            times, msd, mss = sde_solver.ensemble_msd(sde_solver.friction_underdamped_langevin_equation,
-                                                      sde_solver.diffusivity_underdamped_langevin_equation, v0)
+            times, msd, mss = sde_solver.ensemble_msd(sde_solver.a_underdamped_langevin_equation,
+                                                      sde_solver.b_underdamped_langevin_equation, v0)
         else:
-            times, msd, mss = sde_solver.ensemble_msd(sde_solver.friction_udsbm, sde_solver.diffusivity_udsbm, v0)
+            times, msd, mss = sde_solver.ensemble_msd(sde_solver.a_udsbm, sde_solver.b_udsbm, v0)
         # store data in matrix
         msd_matrix = np.zeros((len(times), 3))
         msd_matrix[:, 0] = times
