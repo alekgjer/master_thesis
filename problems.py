@@ -5,7 +5,7 @@ import numpy as np
 
 import utility_functions as util_funcs
 
-from sde_solver import mean_square_displacement_from_sde
+from sde_solver import mean_square_displacement_from_sde, ensemble_and_time_averaged_msd_from_sde
 
 from config import init_folder
 
@@ -14,11 +14,11 @@ from config import init_folder
 parser = argparse.ArgumentParser(description='Python script used to study particles in a box by conducting event driven'
                                              ' simulations of a molecular or a granular gas. Script can also be used to'
                                              ' solve SDEs of Brownian motion using the Euler-Maruyama scheme. Running'
-                                             ' script with -p 4/5 for MSD/SDE solution works on HPCs as well. NB! Only'
+                                             ' script with -p 4-6 for MSD/SDE solution works on HPCs as well. NB! Only'
                                              ' event driven simulation uses several cores. No need for SDE since we'
-                                             ' compute for all particles at all times using numpy.')
+                                             ' compute for all particles at all times using NumPy.')
 parser.add_argument('-p', metavar='Problem number', type=int,
-                    help='Problem is given from 1-7, see Problems.py. Default: 0',
+                    help='Problem is given from 1-8, see Problems.py. Default: 0',
                     default=0)
 parser.add_argument('-N', metavar='Number of particles', type=int,
                     help='Needs to match a set of initial values. Default: 1000.',
@@ -57,22 +57,26 @@ number_of_cores = args['nc']  # number of cores to use for parallelization. Defa
 number_of_runs = args['nr']  # number of runs to use for parallelization. Default: 1
 # use assert to make sure that the choice of problem with parameters can be performed
 assert 0 <= xi <= 1, "Restitution coefficient not in valid range in [0, 1]"
-if p != 5:
+# if doing an event driven simulation we must ensure that exist initial conditions
+if p > 6 or p < 5:
     assert os.path.isfile(os.path.join(init_folder, f'uniform_pos_N_{N}_rad_{radius}_3d.npy')) or \
            os.path.isfile(os.path.join(init_folder, f'uniform_pos_N_{N}_rad_{radius}_2d.npy')), "Cannot do event " \
                                                                                                 "driven simulation " \
                                                                                                 "for given N and r."
-else:
-    assert number_of_cores == 1, "SDE solver should only use one core due to memory concerns."
+# for SDE solver with ensemble msd we will only use one core in order to use all memory. For ensemble and time average
+# msd (p==6) we will use a smaller stopping criterion, but due to the time consumption we run in parallel.
+elif p == 5:
+    assert number_of_cores == 1, "SDE solver ensemble msd should only use one core due to memory concerns."
 # choose what problem one want to solve by simulating particle collisions in 3D or solving SDE
 problem = {0: 'Testing',
            1: 'Visualization 2D',
            2: 'Simulation statistics',
            3: 'Speed distribution',
            4: 'Mean square displacement',
-           5: 'SDE solver',
-           6: 'Mean free path',
-           7: 'Disease outbreak',
+           5: 'SDE solver ensemble msd',
+           6: 'SDE solver ensemble and time averaged msd',
+           7: 'Mean free path',
+           8: 'Disease outbreak',
            }[p]
 print(f"Problem: {problem}")
 
@@ -125,11 +129,18 @@ elif problem == 'Mean square displacement':
                                            simulation_function=util_funcs.mean_square_displacement,
                                            number_of_cores=number_of_cores,
                                            number_of_runs=number_of_runs)
-elif problem == 'SDE solver':
+elif problem == 'SDE solver ensemble msd':
     t_stop = int(stopping_criterion)
     mean_square_displacement_from_sde(particle_parameters=[N, xi, v0, radius],
                                       sde_parameters=[t_stop, dt],
                                       number_of_runs=number_of_runs)
+elif problem == 'SDE solver ensemble and time averaged msd':
+    t_stop = int(stopping_criterion)
+    util_funcs.run_simulations_in_parallel(particle_parameters=[N, xi, v0, radius],
+                                           simulation_parameters=[t_stop, dt],
+                                           simulation_function=ensemble_and_time_averaged_msd_from_sde,
+                                           number_of_cores=number_of_cores,
+                                           number_of_runs=number_of_runs)
 elif problem == 'Mean free path':
     t_stop = int(stopping_criterion)
     timestep = dt
