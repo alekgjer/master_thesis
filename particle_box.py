@@ -9,7 +9,7 @@ class ParticleBox:
         Class which implements a cubic box containing a number of particles with a given radius and mass. The class
         has functionality to implement collisions with vertical, horizontal and top/bottom walls and between two
         particles. ParticleBox is a help class used by the class Simulation, which conducts a event driven simulation
-        of force-free granular gases. ParticleBox can handle periodic boundary conditions (pbc) and hard walls in 3D.
+        of force-free granular gases. ParticleBox can handle periodic boundary conditions(pbc) or hard walls(rbc) in 3D.
     """
 
     def __init__(self, number_of_particles, restitution_coefficient, initial_positions, initial_velocities, masses,

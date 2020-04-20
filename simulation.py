@@ -17,7 +17,7 @@ class Simulation:
         Class of a event driven simulation, where it is implemented to let particles in a ParticleBox collide until a
         given stopping criterion. All types of simulations use the ParticleBox to do the same general simulation, but
         since one is interested in different things there are several implementations. The event driven simulation
-        is a systematic approach where time is incremented for each valid event until the stopping criterion.
+        is a systematic approach where time is incremented for each valid event until the stopping criterion is reached.
     """
     def __init__(self, box_of_particles, stopping_criterion, tc=0):
         """
@@ -77,9 +77,9 @@ class Simulation:
         return simulation_folder
 
     def save_particle_positions(self, simulation_folder, output_number):
-        # TODO: Consider making one for 3D simulations as well. 3D plots are not so illustrative in a report.
+        # TODO: Consider making one for 3D simulations as well. But 3D plots are not so illustrative in a report...
         """
-            Function to save particle positions as a png image at a output time. NB: Only possible for 2D atm!
+            Function to save particle positions as a png image at a output time. NB: Only possible for 2D(x, y) atm!
         :param simulation_folder: folder to save png images.
         :param output_number: int parameters stating what picture is saved in order to keep order easily.
         """

@@ -11,6 +11,7 @@ from config import init_folder
 
 # File used to solve different problems by using the functions in utility_functions
 
+# Use argparse to choose parameters from command line
 parser = argparse.ArgumentParser(description='Python script used to study particles in a box by conducting event driven'
                                              ' simulations of a molecular or a granular gas. Script can also be used to'
                                              ' solve SDEs of Brownian motion using the Euler-Maruyama scheme. Running'
@@ -44,12 +45,12 @@ parser.add_argument('-nc', metavar='Number of cores', type=int,
 parser.add_argument('-nr', metavar='Number of runs', type=int,
                     help='The number of simulations to be run in parallel. Default: 1.',
                     default=1)
-args = vars(parser.parse_args())
+args = vars(parser.parse_args())  # create a dictionary for all parameters
 # set particle and simulation parameters from default value or from command line
 p = args['p']  # problem choice. Default: 0
 N = args['N']  # number of particles. Default: 1000
 xi = args['xi']  # restitution coefficient. Default: 1 -> molecular gas
-radius = args['r']
+radius = args['r']  # radius of the particles. Default: 0.025 -> together with N giving eta 0.065
 stopping_criterion = args['sc']  # stopping criterion. Given as t_stop or avg_numb_coll_stop. Default: 1
 dt = args['dt']  # Timestep value. Used for discretization of time of outputs or sde solution. Default: 0.1
 tc = args['tc']  # duration of contact used to implement TC model. Default: 0
