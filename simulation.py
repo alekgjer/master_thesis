@@ -33,7 +33,7 @@ class Simulation:
 
         self.box_of_particles = box_of_particles  # ParticleBox object
         self.simulation_time = 0
-        self.max_length_collisions_queue = 1e+7  # if collision queue exceed this number, it is reinitialized.
+        self.max_length_collisions_queue = 1e+8  # if collision queue exceed this number, it is reinitialized.
         self.tc = tc  # variable used in the TC model to avoid inelastic collapse. tc=0 => TC model not used
         # boolean array used to indicate the set of particles to plot in red instead of standard blue. Default: None
         # mask varaible is essentially a boolean array to indicate what particles to use when computing quantities
@@ -109,8 +109,9 @@ class Simulation:
             ax.add_collection(coll_1)
             ax.add_collection(coll_2)
 
-        ax.set_xlim([-0.15, 1.15])
-        ax.set_ylim([-0.15, 1.15])
+        ax.set_xlim([-0.05, 1.05])
+        ax.set_ylim([-0.05, 1.05])
+        ax.set_aspect('equal')
         plt.savefig(os.path.join(simulation_folder, f"{output_number}.png"))
         plt.close()
 
